@@ -29,17 +29,45 @@ Sender                   Server                   Recipient
 
 ## API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/register` | Register a message, returns `{id}` |
-| GET | `/pixel?wxId=&id=` | Tracking pixel (1x1 PNG), records reader IP |
-| GET | `/count?wxId=&id=` | Get deduplicated read count |
-| GET | `/messages?q=` | List all messages with read counts |
-| DELETE | `/messages` | Delete all messages |
-| GET | `/messages/{wxId}?q=` | List messages by sender |
-| DELETE | `/messages/{wxId}` | Delete all messages from a sender |
-| GET | `/reads/{id}` | Get detailed read records for a message |
-| GET | `/` | Dashboard frontend |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/register` | Bearer | Register a message, returns `{id}` |
+| GET | `/pixel?wxId=&id=` | — | Tracking pixel (1x1 PNG), records reader IP |
+| GET | `/count?wxId=&id=` | Bearer | Get deduplicated read count |
+| GET | `/messages?q=` | Bearer | List all messages with read counts |
+| DELETE | `/messages` | Bearer | Delete all messages |
+| GET | `/messages/{wxId}?q=` | Bearer | List messages by sender |
+| DELETE | `/messages/{wxId}` | Bearer | Delete all messages from a sender |
+| GET | `/reads/{id}` | Bearer | Get detailed read records for a message |
+| GET | `/` | Cookie | Dashboard frontend |
+| POST | `/auth/verify` | — | Submit token, sets cookie, redirects to `/` |
+| GET | `/auth/status` | — | Returns `{auth_required: bool}` |
+
+## Authentication
+
+The server uses a static token for dashboard and API authentication. Configure via the `AUTH_TOKEN` environment variable:
+
+- **Not set** — No authentication required (open access)
+- **Set** — All endpoints except `/pixel`, `/auth/verify`, `/auth/status`, `/favicon.ico` require auth
+
+### Login Flow
+
+1. Visit `/` → redirected to login page
+2. Enter token → POST to `/auth/verify` → sets `auth_token` cookie → redirects to `/`
+
+### API Access
+
+Include the token in the `Authorization` header:
+
+```
+Authorization: Bearer <REDACTED>
+```
+
+### Configure with Wrangler
+
+```bash
+npx wrangler secret put AUTH_TOKEN
+```
 
 ## Deployment
 
@@ -49,7 +77,8 @@ Sender                   Server                   Recipient
 2. Run `schema.sql` in the D1 console
 3. Create a Worker, paste `worker.js` into the editor
 4. Add D1 binding: Variable name `DB` → select `read-receipts`
-5. Save and deploy
+5. (Optional) Set `AUTH_TOKEN` secret in Worker settings → Variables
+6. Save and deploy
 
 ### Option 2: Wrangler CLI
 
@@ -58,7 +87,21 @@ npm install
 npx wrangler login
 npx wrangler d1 create read-receipts        # copy database_id to wrangler.toml
 npx wrangler d1 execute read-receipts --file=./schema.sql
+npx wrangler secret put AUTH_TOKEN          # optional: set auth token
 npx wrangler deploy
+```
+
+## Project Structure
+
+```
+├── src/
+│   ├── index.js        # Worker source (API routes + logic)
+│   └── index.html      # Dashboard frontend
+├── schema.sql          # D1 table definitions
+├── worker.js           # Single-file build (for dashboard upload)
+├── build.js            # Build script to merge src into worker.js
+├── wrangler.toml       # Cloudflare Workers config
+└── package.json
 ```
 
 ## Tech Stack

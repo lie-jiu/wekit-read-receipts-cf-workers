@@ -959,11 +959,94 @@ async function computeId(wxId, content, createTime) {
   return sha256Hex(raw);
 }
 
+function extractAuthToken(request, env) {
+  if (!env.AUTH_TOKEN) return true;
+  const cookieHeader = request.headers.get("Cookie");
+  if (cookieHeader) {
+    for (const pair of cookieHeader.split(";")) {
+      const trimmed = pair.trim();
+      if (trimmed.startsWith("auth_token=")) {
+        const value = trimmed.slice("auth_token=".length);
+        if (value === env.AUTH_TOKEN) return true;
+      }
+    }
+  }
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    if (authHeader.slice(7) === env.AUTH_TOKEN) return true;
+  }
+  return false;
+}
+
+const LOGIN_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Login — Read Receipts</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9C%89%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+h1{font-size:1.25rem;font-weight:700;margin-bottom:.5rem}
+p{font-size:.85rem;color:#94a3b8;margin-bottom:1.5rem}
+input{width:100%;padding:.6rem .8rem;border:1px solid #475569;border-radius:6px;font-size:.9rem;background:#0f172a;color:#e2e8f0;outline:none;transition:border-color .15s}
+input:focus{border-color:#3b82f6}
+button{width:100%;margin-top:1rem;padding:.6rem;border:none;border-radius:6px;font-size:.9rem;font-weight:600;cursor:pointer;background:#2563eb;color:#fff;transition:background .15s}
+button:hover{background:#1d4ed8}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>&#128274; Read Receipts</h1>
+<p>Enter access token to view the dashboard.</p>
+<form method="POST" action="/auth/verify">
+<input type="password" name="token" placeholder="Access Token" autofocus/>
+<button type="submit">Unlock</button>
+</form>
+</div>
+</body>
+</html>`;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const params = url.searchParams;
+
+    // ── Public endpoints (no auth) ──
+    if (path === "/pixel" || path === "/auth/verify" || path === "/auth/status" || path === "/favicon.ico") {
+      // pass through to handlers below
+    } else if (!extractAuthToken(request, env)) {
+      if (path === "/") {
+        return new Response(LOGIN_HTML, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    // ── POST /auth/verify ──
+    if (path === "/auth/verify" && request.method === "POST") {
+      const formData = await request.formData();
+      const token = formData.get("token") || "";
+      if (token !== env.AUTH_TOKEN) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Set-Cookie": `auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+          "Location": "/",
+        },
+      });
+    }
+
+    // ── GET /auth/status ──
+    if (path === "/auth/status" && request.method === "GET") {
+      return json({ auth_required: !!env.AUTH_TOKEN });
+    }
 
     // ── POST /register ──
     if (path === "/register" && request.method === "POST") {
@@ -1101,7 +1184,7 @@ export default {
       });
     }
 
-    // ── favicon.ico ──
+    // ── favicon.ico (no-op) ──
     if (path === "/favicon.ico") {
       return new Response("", { status: 204 });
     }
