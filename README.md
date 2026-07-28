@@ -61,19 +61,6 @@ npx wrangler d1 execute read-receipts --file=./schema.sql
 npx wrangler deploy
 ```
 
-## Project Structure
-
-```
-├── src/
-│   ├── index.js        # Worker source (API routes + logic)
-│   └── index.html      # Dashboard frontend
-├── schema.sql          # D1 table definitions
-├── worker.js           # Single-file build (for dashboard upload)
-├── build.js            # Build script to merge src into worker.js
-├── wrangler.toml       # Cloudflare Workers config
-└── package.json
-```
-
 ## Tech Stack
 
 - **Runtime:** Cloudflare Workers (V8 isolates, global edge network)
