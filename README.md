@@ -96,14 +96,11 @@ npx wrangler deploy
 ## Project Structure
 
 ```
-├── src/
-│   ├── index.js        # Worker source (API routes + logic)
-│   └── index.html      # Dashboard frontend
 ├── schema.sql          # D1 table definitions
-├── worker.js           # Single-file build (for dashboard upload)
-├── build.js            # Build script to merge src into worker.js
+├── worker.js           # Worker source (API routes + dashboard frontend)
 ├── wrangler.toml       # Cloudflare Workers config
-└── package.json
+├── package.json
+└── LICENSE
 ```
 
 ## Tech Stack
@@ -115,4 +112,4 @@ npx wrangler deploy
 
 ## License
 
-MIT
+Apache-2.0
