@@ -1,0 +1,15 @@
+{
+  "name": "read-receipts",
+  "version": "1.0.0",
+  "description": "Message read-count tracking service on Cloudflare Workers + D1",
+  "main": "worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "db:create": "wrangler d1 create read-receipts",
+    "db:init": "wrangler d1 execute read-receipts --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute read-receipts --file=./schema.sql --local",
+    "auth:setup": "wrangler secret put AUTH_TOKEN"
+  },
+  "license": "Apache-2.0"
+}

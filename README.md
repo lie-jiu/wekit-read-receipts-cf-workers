@@ -1,5 +1,7 @@
 # Read Receipts Server
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lie-jiu/wekit-read-receipts-cf-workers)
+
 A message read-count tracking service built on **Cloudflare Workers** + **D1**. Embed a 1x1 transparent tracking pixel in your messages — when recipients open the message, their IP is recorded and deduplicated read counts are returned.
 
 ## How It Works

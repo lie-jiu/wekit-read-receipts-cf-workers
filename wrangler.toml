@@ -1,0 +1,8 @@
+name = "read-receipts"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "read-receipts"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
