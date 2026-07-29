@@ -1186,7 +1186,7 @@ export default {
 
     // ── favicon.ico (no-op) ──
     if (path === "/favicon.ico") {
-      return new Response("", { status: 204 });
+      return new Response(null, { status: 204 });
     }
 
     return new Response("Not Found", { status: 404 });
