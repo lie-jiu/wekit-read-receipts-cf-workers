@@ -935,19 +935,22 @@ async function sha256Hex(input) {
   return Array.from(hashArray, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+};
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...SECURITY_HEADERS },
   });
 }
 
 function getClientIP(request) {
-  return (
-    request.headers.get("CF-Connecting-IP") ||
-    request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
-    "unknown"
-  );
+  // 只信任 Cloudflare 注入的真实客户端 IP；不接受客户端可控的 X-Forwarded-For
+  return request.headers.get("CF-Connecting-IP") || "unknown";
 }
 
 function nowTimestamp() {
@@ -959,21 +962,44 @@ async function computeId(wxId, content, createTime) {
   return sha256Hex(raw);
 }
 
-function extractAuthToken(request, env) {
-  if (!env.AUTH_TOKEN) return true;
+// 常量时间比较：先做 SHA-256 摘要再比较，避免字符串逐字符比较的时序侧信道
+async function tokenMatches(input, expected) {
+  if (typeof input !== "string" || input.length === 0) return false;
+  const a = await sha256Hex(input);
+  const b = await sha256Hex(String(expected)); // 防御非字符串 env 配置（如 TOML 数字）
+  return a === b;
+}
+
+async function extractAuthToken(request, env) {
+  if (!env.AUTH_TOKEN) return true; // 未配置 AUTH_TOKEN → 开放模式（README 已说明）
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    if (await tokenMatches(authHeader.slice(7), env.AUTH_TOKEN)) return true;
+  }
   const cookieHeader = request.headers.get("Cookie");
   if (cookieHeader) {
     for (const pair of cookieHeader.split(";")) {
       const trimmed = pair.trim();
-      if (trimmed.startsWith("auth_token=")) {
-        const value = trimmed.slice("auth_token=".length);
-        if (value === env.AUTH_TOKEN) return true;
+      if (trimmed.startsWith("__Host-session=")) {
+        // 新会话 cookie：值 = sess_<随机hex>，服务端仅存哈希
+        const value = trimmed.slice("__Host-session=".length);
+        if (value.startsWith("sess_")) {
+          try {
+            const row = await env.DB.prepare(
+              "SELECT expires_at FROM sessions WHERE token_hash = ?"
+            )
+              .bind(await sha256Hex(value.slice(5)))
+              .first();
+            if (row && row.expires_at > nowTimestamp()) return true;
+          } catch {}
+        }
+      } else if (trimmed.startsWith("auth_token=")) {
+        // 兼容旧版 cookie（直接携带 AUTH_TOKEN）
+        if (await tokenMatches(trimmed.slice("auth_token=".length), env.AUTH_TOKEN)) {
+          return true;
+        }
       }
     }
-  }
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    if (authHeader.slice(7) === env.AUTH_TOKEN) return true;
   }
   return false;
 }
@@ -1009,43 +1035,181 @@ button:hover{background:#1d4ed8}
 </body>
 </html>`;
 
+// ── 安全辅助函数 ────────────────────────────────────────────
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 会话 30 天
+const PIXEL_RATE_LIMIT = 10; // /pixel：每 IP 每分钟最多 10 次
+const VERIFY_RATE_LIMIT = 5; // /auth/verify：每 IP 每分钟最多 5 次
+
+const DASHBOARD_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "form-action 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join("; ");
+
+const LOGIN_CSP = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src data:", // 登录页 favicon 为 data: URI
+  "form-action 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function randomHex(bytes) {
+  const buf = crypto.getRandomValues(new Uint8Array(bytes));
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// LIKE 通配符转义：将 % _ \ 作为字面量搜索
+function escapeLike(s) {
+  return String(s).replace(/[\\%_]/g, (m) => "\\" + m);
+}
+
+// 基于 Cache API 的固定窗口限流（近似计数：并发请求存在微小 TOCTOU 偏差，
+// 对登录限流仅弱化不失效，可接受；如需精确计数可改用 D1 原子 UPDATE）。
+// failClosed=true：限流系统故障时拒绝请求（登录场景）；false：放行（像素场景，保证追踪可用性）。
+async function rateLimit(key, limit, windowSec, failClosed = false) {
+  const url = `https://internal.ratelimit.local/${encodeURIComponent(key)}`;
+  try {
+    const cache = caches.default;
+    const cached = await cache.match(url);
+    let count = 0;
+    if (cached) {
+      const data = await cached.json();
+      count = Number(data.count) || 0;
+    }
+    if (count >= limit) return false;
+    await cache.put(
+      url,
+      new Response(JSON.stringify({ count: count + 1 }), {
+        headers: { "Cache-Control": `max-age=${windowSec}` },
+      })
+    );
+    return true;
+  } catch {
+    return !failClosed;
+  }
+}
+
+// 管理操作审计日志
+async function audit(db, action, detail) {
+  try {
+    await db
+      .prepare("INSERT INTO audit_logs (timestamp, action, detail) VALUES (?, ?, ?)")
+      .bind(nowTimestamp(), action, String(detail).slice(0, 500))
+      .run();
+  } catch {}
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const params = url.searchParams;
 
-    // ── Public endpoints (no auth) ──
-    if (path === "/pixel" || path === "/auth/verify" || path === "/auth/status" || path === "/favicon.ico") {
-      // pass through to handlers below
-    } else if (!extractAuthToken(request, env)) {
+    const authConfigured = !!env.AUTH_TOKEN;
+    const weakAuth =
+      authConfigured && (typeof env.AUTH_TOKEN !== "string" || env.AUTH_TOKEN.length < 24);
+    const isPublicPath =
+      path === "/pixel" ||
+      path === "/auth/verify" ||
+      path === "/auth/status" ||
+      path === "/favicon.ico";
+
+    // ── 认证（公开端点除外）──
+    const authed = isPublicPath || (await extractAuthToken(request, env));
+
+    // 弱 token 配置：拒绝一切管理端点，防止弱口令被爆破
+    if (weakAuth && !isPublicPath) {
+      return new Response(
+        "Server misconfigured: AUTH_TOKEN must be at least 24 characters. Rotate it with: npx wrangler secret put AUTH_TOKEN",
+        {
+          status: 503,
+          headers: { "Content-Type": "text/plain; charset=utf-8", ...SECURITY_HEADERS },
+        }
+      );
+    }
+    if (!authed) {
       if (path === "/") {
         return new Response(LOGIN_HTML, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Security-Policy": LOGIN_CSP,
+            ...SECURITY_HEADERS,
+          },
         });
       }
-      return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401, headers: { ...SECURITY_HEADERS } });
     }
 
     // ── POST /auth/verify ──
     if (path === "/auth/verify" && request.method === "POST") {
+      if (weakAuth) {
+        return new Response(
+          "Server misconfigured: AUTH_TOKEN must be at least 24 characters",
+          { status: 503, headers: { ...SECURITY_HEADERS } }
+        );
+      }
+      const ip = getClientIP(request);
+      if (!(await rateLimit("verify:" + ip, VERIFY_RATE_LIMIT, 60, true))) {
+        return new Response("Too Many Requests", { status: 429, headers: { ...SECURITY_HEADERS } });
+      }
       const formData = await request.formData();
-      const token = formData.get("token") || "";
-      if (token !== env.AUTH_TOKEN) {
-        return new Response("Unauthorized", { status: 401 });
+      const token = String(formData.get("token") || "");
+      if (!(await tokenMatches(token, env.AUTH_TOKEN))) {
+        // 失败延迟：进一步抬高暴力破解成本
+        await sleep(250 + Math.random() * 500);
+        return new Response("Unauthorized", { status: 401, headers: { ...SECURITY_HEADERS } });
+      }
+      // 顺带清理过期会话
+      await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?")
+        .bind(nowTimestamp())
+        .run()
+        .catch(() => {});
+      const sessionId = await randomHex(32);
+      const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 19);
+      // 会话必须持久化成功才下发 cookie，避免"登录后立即失效"的死循环
+      let sessRes;
+      try {
+        sessRes = await env.DB.prepare(
+          "INSERT INTO sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)"
+        )
+          .bind(await sha256Hex(sessionId), nowTimestamp(), expiresAt)
+          .run();
+      } catch {
+        sessRes = null;
+      }
+      if (!sessRes || !sessRes.success) {
+        return new Response("Session creation failed", {
+          status: 500,
+          headers: { ...SECURITY_HEADERS },
+        });
       }
       return new Response(null, {
         status: 302,
         headers: {
-          "Set-Cookie": `auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+          "Set-Cookie": `__Host-session=sess_${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
           "Location": "/",
+          ...SECURITY_HEADERS,
         },
       });
     }
 
     // ── GET /auth/status ──
     if (path === "/auth/status" && request.method === "GET") {
-      return json({ auth_required: !!env.AUTH_TOKEN });
+      return json({ auth_required: authConfigured, weak_token: weakAuth });
     }
 
     // ── POST /register ──
@@ -1055,6 +1219,17 @@ export default {
         const { wxId, content, createTime } = body;
         if (!wxId || !content || createTime == null) {
           return json({ error: "Missing fields: wxId, content, createTime" }, 400);
+        }
+        if (
+          typeof wxId !== "string" ||
+          wxId.length > 64 ||
+          typeof content !== "string" ||
+          content.length > 4000
+        ) {
+          return json(
+            { error: "Invalid fields: wxId (string ≤64 chars), content (string ≤4000 chars)" },
+            400
+          );
         }
         const id = await computeId(wxId, content, createTime);
         const ts = nowTimestamp();
@@ -1073,13 +1248,29 @@ export default {
     if (path === "/pixel" && request.method === "GET") {
       const wxId = params.get("wxId") || "";
       const id = params.get("id") || "";
-      if (!wxId || !id) {
-        return new Response("Bad Request", { status: 400 });
+      if (!wxId || !id || wxId.length > 64 || id.length > 64) {
+        return new Response("Bad Request", { status: 400, headers: { ...SECURITY_HEADERS } });
       }
       const ip = getClientIP(request);
+      if (ip === "unknown") {
+        return new Response("Bad Request", { status: 400, headers: { ...SECURITY_HEADERS } });
+      }
+      // 每 IP 限流，防存储耗尽 DoS（故障时放行，保证追踪可用性）
+      if (!(await rateLimit("pixel:" + ip, PIXEL_RATE_LIMIT, 60, false))) {
+        return new Response("Too Many Requests", { status: 429, headers: { ...SECURITY_HEADERS } });
+      }
+      // 只记录已注册消息的读取，拒绝任意 id/wxId 组合的填充攻击
+      const msg = await env.DB.prepare("SELECT 1 FROM messages WHERE id = ? AND wx_id = ?")
+        .bind(id, wxId)
+        .first();
+      if (!msg) {
+        return new Response("Not Found", { status: 404, headers: { ...SECURITY_HEADERS } });
+      }
       const ts = nowTimestamp();
+      // INSERT OR IGNORE 依赖 schema.sql 的 UNIQUE(id, ip) 索引实现存储级去重；
+      // 升级时必须重放 schema.sql（见 README「Upgrading an existing deployment」）
       await env.DB.prepare(
-        "INSERT INTO reads (id, wx_id, ip, timestamp) VALUES (?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO reads (id, wx_id, ip, timestamp) VALUES (?, ?, ?, ?)"
       )
         .bind(id, wxId, ip, ts)
         .run();
@@ -1090,6 +1281,7 @@ export default {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           "Pragma": "no-cache",
           "Expires": "0",
+          ...SECURITY_HEADERS,
         },
       });
     }
@@ -1111,13 +1303,13 @@ export default {
 
     // ── GET /messages ──
     if (path === "/messages" && request.method === "GET") {
-      const q = params.get("q") || "";
+      const q = (params.get("q") || "").slice(0, 200);
       let query = `SELECT m.id, m.wx_id AS wxId, m.content, m.timestamp, COUNT(DISTINCT r.ip) AS reads
         FROM messages m LEFT JOIN reads r ON m.id = r.id`;
       const bindParams = [];
       if (q) {
-        query += " WHERE m.content LIKE ?";
-        bindParams.push(`%${q}%`);
+        query += " WHERE m.content LIKE ? ESCAPE '\\'";
+        bindParams.push(`%${escapeLike(q)}%`);
       }
       query += " GROUP BY m.id ORDER BY m.timestamp DESC";
       const result = await env.DB.prepare(query)
@@ -1130,21 +1322,33 @@ export default {
     if (path === "/messages" && request.method === "DELETE") {
       await env.DB.prepare("DELETE FROM reads").run();
       await env.DB.prepare("DELETE FROM messages").run();
+      await audit(env.DB, "delete_all", "");
       return json({ status: "ok" });
     }
 
-    // ── GET /messages/{wxId} ──
+    // ── GET /messages/{wxId} 与 DELETE /messages/{wxId} ──
     const wxIdMatch = path.match(/^\/messages\/([^/]+)$/);
-    if (wxIdMatch && request.method === "GET") {
-      const wxId = decodeURIComponent(wxIdMatch[1]);
-      const q = params.get("q") || "";
+    if (wxIdMatch && (request.method === "GET" || request.method === "DELETE")) {
+      let wxId;
+      try {
+        wxId = decodeURIComponent(wxIdMatch[1]);
+      } catch {
+        return json({ error: "Invalid wxId encoding" }, 400);
+      }
+      if (request.method === "DELETE") {
+        await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
+        await audit(env.DB, "delete_wxid", wxId);
+        return json({ status: "ok" });
+      }
+      const q = (params.get("q") || "").slice(0, 200);
       let query = `SELECT m.id, m.wx_id AS wxId, m.content, m.timestamp, COUNT(DISTINCT r.ip) AS reads
         FROM messages m LEFT JOIN reads r ON m.id = r.id
         WHERE m.wx_id = ?`;
       const bindParams = [wxId];
       if (q) {
-        query += " AND m.content LIKE ?";
-        bindParams.push(`%${q}%`);
+        query += " AND m.content LIKE ? ESCAPE '\\'";
+        bindParams.push(`%${escapeLike(q)}%`);
       }
       query += " GROUP BY m.id ORDER BY m.timestamp DESC";
       const result = await env.DB.prepare(query)
@@ -1153,22 +1357,15 @@ export default {
       return json(result.results || []);
     }
 
-    // ── DELETE /messages/{wxId} ──
-    if (wxIdMatch && request.method === "DELETE") {
-      const wxId = decodeURIComponent(wxIdMatch[1]);
-      await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?")
-        .bind(wxId)
-        .run();
-      await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?")
-        .bind(wxId)
-        .run();
-      return json({ status: "ok" });
-    }
-
     // ── GET /reads/{id} ──
     const readsMatch = path.match(/^\/reads\/([^/]+)$/);
     if (readsMatch && request.method === "GET") {
-      const id = decodeURIComponent(readsMatch[1]);
+      let id;
+      try {
+        id = decodeURIComponent(readsMatch[1]);
+      } catch {
+        return json({ error: "Invalid id encoding" }, 400);
+      }
       const result = await env.DB.prepare(
         "SELECT ip, timestamp FROM reads WHERE id = ? ORDER BY timestamp DESC"
       )
@@ -1180,15 +1377,36 @@ export default {
     // ── GET / (Dashboard) ──
     if (path === "/" && request.method === "GET") {
       return new Response(html, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": DASHBOARD_CSP,
+          ...SECURITY_HEADERS,
+        },
       });
     }
 
     // ── favicon.ico (no-op) ──
     if (path === "/favicon.ico") {
-      return new Response(null, { status: 204 });
+      return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS } });
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found", { status: 404, headers: { ...SECURITY_HEADERS } });
+  },
+
+  // 定时清理：过期会话；可选 RETENTION_DAYS 数据保留策略
+  async scheduled(event, env) {
+    try {
+      await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?")
+        .bind(nowTimestamp())
+        .run();
+      if (env.RETENTION_DAYS) {
+        const cutoff = new Date(Date.now() - Number(env.RETENTION_DAYS) * 86400000)
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19);
+        await env.DB.prepare("DELETE FROM reads WHERE timestamp < ?").bind(cutoff).run();
+        await env.DB.prepare("DELETE FROM messages WHERE timestamp < ?").bind(cutoff).run();
+      }
+    } catch {}
   },
 };

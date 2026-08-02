@@ -6,3 +6,7 @@ compatibility_date = "2025-01-01"
 binding = "DB"
 database_name = "read-receipts"
 database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+
+# 定时清理过期会话（及可选的数据保留策略 RETENTION_DAYS）
+[triggers]
+crons = ["0 3 * * *"]
