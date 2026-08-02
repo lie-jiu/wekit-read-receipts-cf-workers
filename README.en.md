@@ -92,33 +92,41 @@ npx wrangler secret put AUTH_TOKEN   # generate a strong one: openssl rand -hex 
 
 ## Deployment
 
-Use **Workers Builds (Git integration)**: connect your repository directly to a Cloudflare Worker — every push to `main` auto-builds and deploys. No Git repository is created for you.
+Two options — pick the one that fits your workflow. Neither requires a D1 database ID: the database is auto-created and bound on the first deploy (Automatic provisioning, requires Wrangler ≥ 4.45.0; the ID stays in the dashboard, never in the repo).
 
-### 1. Prepare the D1 database
-
-1. Create a D1 database named `read-receipts` (Cloudflare Dashboard → **D1**)
-2. Put the database ID into `wrangler.toml` in your repository (replace `<YOUR_D1_DATABASE_ID>`)
-3. Run `schema.sql` in the database console (idempotent — safe to re-run)
-
-### 2. Connect your repository (Workers Builds)
-
-1. Fork this repository (or use your own) and clone it locally
-2. Cloudflare Dashboard → **Workers & Pages → Create → Worker** → choose **Workers Builds**
-3. **Connect to GitHub** and select your repository
-4. Set production branch to `main`, leave the build command empty
-5. Create the Worker
-
-### 3. Set secrets
+### CLI
 
 ```bash
+git clone https://github.com/lie-jiu/wekit-read-receipts-cf-workers
+cd wekit-read-receipts-cf-workers
+npx wrangler login
 npx wrangler secret put AUTH_TOKEN   # openssl rand -hex 32
+npx wrangler deploy                  # auto-creates the D1 database on first deploy
 ```
 
-Secrets (e.g. `AUTH_TOKEN`, optional `RETENTION_DAYS`) are set via `wrangler secret put` or the dashboard only — never committed to the repository.
+Initialize the database after deploying:
 
-### 4. Deploy
+```bash
+npx wrangler d1 execute read-receipts --file=./schema.sql --remote
+```
 
-`git push` to `main` deploys automatically.
+> [!IMPORTANT]
+> Run `schema.sql` once after the first deploy, otherwise every endpoint fails with missing-table errors. It is idempotent — re-run it when upgrading.
+
+> [!NOTE]
+> Local development: `npx wrangler dev` auto-creates a local D1; put local secrets in `.dev.vars` (already gitignored).
+
+### Workers Builds (Git integration)
+
+1. Fork this repository (or use your own)
+2. Cloudflare Dashboard → **Workers & Pages → Create → Worker** → choose **Workers Builds**
+3. **Connect to GitHub**, select your repository; production branch `main`, build command empty
+4. Set secrets: Worker → **Settings → Variables and Secrets** → add `AUTH_TOKEN` (≥ 24 chars)
+5. `git push` to `main` auto-builds and deploys; the D1 database is auto-created on the first deploy
+6. Run `schema.sql` once in the D1 database console
+
+> [!NOTE]
+> Optional `RETENTION_DAYS` variable to auto-purge data older than N days.
 
 ### Upgrading an existing deployment
 

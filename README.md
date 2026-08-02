@@ -94,33 +94,41 @@ npx wrangler secret put AUTH_TOKEN   # 生成强 token：openssl rand -hex 32
 
 ## 部署
 
-推荐使用 **Workers Builds（Git 集成）**：将仓库直接连接到 Cloudflare Worker，每次推送到 `main` 分支自动构建并部署，无需 Cloudflare 创建额外 Git 仓库。
+支持两种部署方式，按需选择。两种方式均无需手动配置 D1 数据库 ID：首次部署时自动创建并绑定（Automatic provisioning，需 Wrangler ≥ 4.45.0；ID 仅存于 dashboard，不写回仓库）。
 
-### 1. 准备 D1 数据库
-
-1. 在 Cloudflare Dashboard → **D1** 创建数据库 `read-receipts`
-2. 将数据库 ID 填入你仓库的 `wrangler.toml`（替换 `<YOUR_D1_DATABASE_ID>`）
-3. 在数据库 Console 执行 `schema.sql`（幂等，可重复执行）
-
-### 2. 连接仓库（Workers Builds）
-
-1. fork 本仓库（或使用自己的仓库），clone 到本地
-2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**，选择 **Workers Builds**
-3. **Connect to GitHub**，选择你的仓库
-4. 生产分支设为 `main`，构建命令留空
-5. 创建 Worker
-
-### 3. 设置密钥
+### CLI
 
 ```bash
+git clone https://github.com/lie-jiu/wekit-read-receipts-cf-workers
+cd wekit-read-receipts-cf-workers
+npx wrangler login
 npx wrangler secret put AUTH_TOKEN   # openssl rand -hex 32
+npx wrangler deploy                  # 首次部署自动创建 D1 数据库
 ```
 
-`AUTH_TOKEN` 等密钥通过 `wrangler secret put` 或 dashboard 设置，不写入仓库。可选 `RETENTION_DAYS`。
+部署完成后初始化数据库：
 
-### 4. 部署
+```bash
+npx wrangler d1 execute read-receipts --file=./schema.sql --remote
+```
 
-`git push` 到 `main` 分支即自动部署。
+> [!IMPORTANT]
+> `schema.sql` 必须在首次部署后执行一次，否则所有接口都会因缺少数据表而报错。它是幂等的，升级时重跑即可。
+
+> [!NOTE]
+> 本地开发：`npx wrangler dev` 会自动创建本地 D1；本地密钥写在 `.dev.vars`（已被 `.gitignore` 排除）。
+
+### Workers Builds（Git 集成）
+
+1. fork 本仓库（或使用自己的仓库）
+2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**，选择 **Workers Builds**
+3. **Connect to GitHub**，选择你的仓库；生产分支 `main`，构建命令留空
+4. 创建后设置密钥：Worker → **Settings → Variables and Secrets** → 添加 `AUTH_TOKEN`（≥ 24 字符）
+5. `git push` 到 `main` 自动构建部署；首次部署自动创建 D1 数据库
+6. 在 D1 数据库 Console 执行一次 `schema.sql`
+
+> [!NOTE]
+> 可选 `RETENTION_DAYS` 变量，按天数自动清理过期数据。
 
 ### 升级现有部署
 
