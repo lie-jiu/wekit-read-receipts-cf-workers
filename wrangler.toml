@@ -1,4 +1,4 @@
-name = "read-receipts"
+name = "wekit-read-receipts-cf-workers"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
