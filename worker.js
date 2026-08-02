@@ -756,10 +756,17 @@ const html = `<!doctype html>
         try {
           const res = await fetch(url);
           if (!res.ok) {
-            const text = await res.text();
-            tbody.innerHTML = \`<tr class="empty-row"><td colspan="4">HTTP \${res.status}: \${esc(text)}</td></tr>\`;
+            let detail = "";
+            try {
+              const err = await res.json();
+              detail = err.error || JSON.stringify(err);
+            } catch {
+              detail = await res.text();
+            }
+            if (detail.length > 300) detail = detail.slice(0, 300) + "…";
+            tbody.innerHTML = \`<tr class="empty-row"><td colspan="4">HTTP \${res.status}: \${esc(detail)}</td></tr>\`;
             recordCount.textContent = "0";
-            toast(\`HTTP \${res.status}: \${text}\`, "error");
+            toast(\`HTTP \${res.status}: \${detail}\`, "error");
             return;
           }
           const data = await res.json();
@@ -1110,10 +1117,9 @@ async function audit(db, action, detail) {
   } catch {}
 }
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const path = url.pathname;
+async function handleRequest(request, env) {
+  const url = new URL(request.url);
+  const path = url.pathname;
     const params = url.searchParams;
 
     const authConfigured = !!env.AUTH_TOKEN;
@@ -1391,6 +1397,16 @@ export default {
     }
 
     return new Response("Not Found", { status: 404, headers: { ...SECURITY_HEADERS } });
+}
+
+export default {
+  async fetch(request, env) {
+    try {
+      return await handleRequest(request, env);
+    } catch (e) {
+      console.error("Unhandled error:", e);
+      return json({ error: e?.message || "Internal Server Error" }, 500);
+    }
   },
 
   // 定时清理：过期会话；可选 RETENTION_DAYS 数据保留策略
