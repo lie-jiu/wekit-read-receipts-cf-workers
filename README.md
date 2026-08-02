@@ -94,44 +94,33 @@ npx wrangler secret put AUTH_TOKEN   # 生成强 token：openssl rand -hex 32
 
 ## 部署
 
-推荐使用 **Workers Builds（Git 集成）**：把你的仓库直接连接到 Cloudflare Worker，每次推送到生产分支（`main`）都会自动构建并部署——不需要 Cloudflare 替你新建 Git 仓库。
-
-### 0. 原则：哪些进仓库，哪些不进
-
-| 内容 | 放哪里 | 原因 |
-|------|--------|------|
-| `worker.js`、`schema.sql`、`wrangler.toml` 里的 worker 名 / cron / D1 绑定结构 | 仓库 | 公共模板，任何人都可以复用 |
-| D1 的 `database_id` | **你自己的仓库**（fork）里的 `wrangler.toml` | 每个 Cloudflare 账户的 D1 数据库 ID 都不同，且属于私有资源，不应出现在公共仓库 |
-| `AUTH_TOKEN` 等密钥 | `npx wrangler secret put` 或 dashboard 的 **Variables and Secrets** | 密钥永远不进仓库，只存在 Cloudflare 侧 |
+推荐使用 **Workers Builds（Git 集成）**：将仓库直接连接到 Cloudflare Worker，每次推送到 `main` 分支自动构建并部署，无需 Cloudflare 创建额外 Git 仓库。
 
 ### 1. 准备 D1 数据库
 
-1. Cloudflare Dashboard → **D1 → Create database** → 命名为 `read-receipts`
-2. 复制数据库的 **ID**，填入**你自己的仓库**中的 `wrangler.toml`（替换 `<YOUR_D1_DATABASE_ID>`）；如果你用的是 fork，就填进你的 fork 再提交
-3. 打开数据库的 **Console**，执行 `schema.sql` 的内容（幂等——可重复执行）
+1. 在 Cloudflare Dashboard → **D1** 创建数据库 `read-receipts`
+2. 将数据库 ID 填入你仓库的 `wrangler.toml`（替换 `<YOUR_D1_DATABASE_ID>`）
+3. 在数据库 Console 执行 `schema.sql`（幂等，可重复执行）
 
-### 2. 连接你的仓库（Workers Builds）
+### 2. 连接仓库（Workers Builds）
 
-1. 把本仓库 fork 到你的 GitHub 账户（或用你自己的仓库），然后 clone 到本地
-2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**
-3. 选择 **Workers Builds**（Git 仓库）→ **Connect to GitHub**
-4. 选择你 fork 出来的仓库（或你自己的原仓库）——而不是 Cloudflare 替你新建的仓库
-5. 将 **Production branch** 设为 `main`；**构建命令留空**（无构建步骤——`worker.js` 即产物）
-6. 创建 Worker
+1. fork 本仓库（或使用自己的仓库），clone 到本地
+2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**，选择 **Workers Builds**
+3. **Connect to GitHub**，选择你的仓库
+4. 生产分支设为 `main`，构建命令留空
+5. 创建 Worker
 
-### 3. 设置密钥（不进仓库）
-
-运行以下命令，密钥只存在 Cloudflare 侧，不写入任何仓库文件：
+### 3. 设置密钥
 
 ```bash
-npx wrangler secret put AUTH_TOKEN   # 生成强 token：openssl rand -hex 32
+npx wrangler secret put AUTH_TOKEN   # openssl rand -hex 32
 ```
 
-可选：用同样的方式设置 `RETENTION_DAYS`。`DB` 绑定与 cron 已在 `wrangler.toml` 中声明，会自动生效。
+`AUTH_TOKEN` 等密钥通过 `wrangler secret put` 或 dashboard 设置，不写入仓库。可选 `RETENTION_DAYS`。
 
 ### 4. 部署
 
-`git push` 到 `main` 分支即可自动构建并部署。
+`git push` 到 `main` 分支即自动部署。
 
 ### 升级现有部署
 
