@@ -1,7 +1,5 @@
 # Read Receipts Server
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lie-jiu/wekit-read-receipts-cf-workers)
-
 A message read-count tracking service built on **Cloudflare Workers** + **D1**. Embed a 1x1 transparent tracking pixel in your messages — when recipients open the message, their IP is recorded and deduplicated read counts are returned.
 
 > ⚠️ **Privacy disclosure**: This service records recipients' IP addresses and exact open timestamps without their knowledge. In China this falls under the Personal Information Protection Law (PIPL) — inform recipients before tracking, and consider data minimization (e.g. set `RETENTION_DAYS`). WeChat's terms of service prohibit third-party tracking of this kind; your account may be at risk.
@@ -92,26 +90,34 @@ npx wrangler secret put AUTH_TOKEN   # generate a strong one: openssl rand -hex 
 
 ## Deployment
 
-### Option 1: Cloudflare Dashboard (No CLI)
+The recommended way is **Workers Builds (Git integration)**: connect this very repository directly — no fork and no extra Git repository is created, and every push to `main` auto-deploys.
 
-1. Create a D1 database named `read-receipts` in Cloudflare dashboard
-2. Run `schema.sql` in the D1 console (safe to re-run on existing deployments)
-3. Create a Worker, paste `worker.js` into the editor
-4. Add D1 binding: Variable name `DB` → select `read-receipts`
-5. Set `AUTH_TOKEN` secret (≥ 24 chars) in Worker settings → Variables; optional `RETENTION_DAYS`
-6. Add a Cron Trigger `0 3 * * *` (Settings → Triggers → Cron)
-7. Save and deploy
+### 1. Prepare the D1 database
 
-### Option 2: Wrangler CLI
+1. Cloudflare Dashboard → **D1 → Create database** → name it `read-receipts`
+2. Copy the database's **ID** and paste it into `wrangler.toml`, replacing `REPLACE_WITH_YOUR_DATABASE_ID`
+3. Open the database's **Console** and run the contents of `schema.sql` (idempotent — safe to re-run)
 
-```bash
-npm install
-npx wrangler login
-npx wrangler d1 create read-receipts        # copy database_id to wrangler.toml
-npx wrangler d1 execute read-receipts --file=./schema.sql
-npx wrangler secret put AUTH_TOKEN          # required: ≥ 24 chars, e.g. openssl rand -hex 32
-npx wrangler deploy
-```
+### 2. Connect this repository (Workers Builds)
+
+1. Cloudflare Dashboard → **Workers & Pages → Create → Worker**
+2. Choose **Workers Builds** (Git repository) → **Connect to GitHub**
+3. Select this repository (`lie-jiu/wekit-read-receipts-cf-workers`) — the original repo, not a fork
+4. Set **Production branch** to `main`; leave the **build command empty** (no build step — `worker.js` is the artifact)
+5. Create the Worker
+
+### 3. Configure the Worker
+
+In the Worker's **Settings**:
+
+- **Variables and Secrets**: add `AUTH_TOKEN` (≥ 24 chars, e.g. `openssl rand -hex 32`); optional `RETENTION_DAYS`
+- **Triggers → Cron**: add `0 3 * * *`
+
+The `DB` binding is declared in `wrangler.toml` and picked up automatically.
+
+### 4. Deploy
+
+From now on, `git push` to `main` builds and deploys automatically.
 
 ### Upgrading an existing deployment
 
