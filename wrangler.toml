@@ -2,10 +2,13 @@ name = "read-receipts"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
+# D1 绑定：database_id 是你自己的 Cloudflare 账户私有的数据库 ID。
+# 创建数据库：npx wrangler d1 create read-receipts
+# 然后把该 ID 填入【你自己的仓库】中的 wrangler.toml，不要提交到公共仓库。
 [[d1_databases]]
 binding = "DB"
 database_name = "read-receipts"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "<YOUR_D1_DATABASE_ID>"
 
 # 定时清理过期会话（及可选的数据保留策略 RETENTION_DAYS）
 [triggers]

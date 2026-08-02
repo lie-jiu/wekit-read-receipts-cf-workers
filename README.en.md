@@ -92,34 +92,44 @@ npx wrangler secret put AUTH_TOKEN   # generate a strong one: openssl rand -hex 
 
 ## Deployment
 
-The recommended way is **Workers Builds (Git integration)**: connect this very repository directly — no fork and no extra Git repository is created, and every push to `main` auto-deploys.
+The recommended way is **Workers Builds (Git integration)**: connect your repository directly to a Cloudflare Worker — every push to the production branch (`main`) auto-builds and deploys, and Cloudflare does not create a Git repository for you.
+
+### 0. What goes in the repo vs. what doesn't
+
+| Content | Where it lives | Why |
+|---------|----------------|-----|
+| `worker.js`, `schema.sql`, worker name / cron / D1 binding structure in `wrangler.toml` | repo | public template, reusable by anyone |
+| D1 `database_id` | `wrangler.toml` in **your own** repo (fork) | every Cloudflare account has its own D1 database ID; it is private to your account and must not appear in a public repo |
+| `AUTH_TOKEN` and other secrets | `npx wrangler secret put` or dashboard **Variables and Secrets** | secrets never go into any repo file; they live only on Cloudflare's side |
 
 ### 1. Prepare the D1 database
 
 1. Cloudflare Dashboard → **D1 → Create database** → name it `read-receipts`
-2. Copy the database's **ID** and paste it into `wrangler.toml`, replacing `REPLACE_WITH_YOUR_DATABASE_ID`
+2. Copy the database's **ID** into `wrangler.toml` in **your own** repo (replace `<YOUR_D1_DATABASE_ID>`); if you are using a fork, fill it in and commit it to your fork
 3. Open the database's **Console** and run the contents of `schema.sql` (idempotent — safe to re-run)
 
-### 2. Connect this repository (Workers Builds)
+### 2. Connect your repository (Workers Builds)
 
-1. Cloudflare Dashboard → **Workers & Pages → Create → Worker**
-2. Choose **Workers Builds** (Git repository) → **Connect to GitHub**
-3. Select this repository (`lie-jiu/wekit-read-receipts-cf-workers`) — the original repo, not a fork
-4. Set **Production branch** to `main`; leave the **build command empty** (no build step — `worker.js` is the artifact)
-5. Create the Worker
+1. Fork this repository to your GitHub account (or use your own repo), then clone it locally
+2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**
+3. Choose **Workers Builds** (Git repository) → **Connect to GitHub**
+4. Select the repository you forked (or your original repo) — not a repository Cloudflare created for you
+5. Set **Production branch** to `main`; leave the **build command empty** (no build step — `worker.js` is the artifact)
+6. Create the Worker
 
-### 3. Configure the Worker
+### 3. Set secrets (never in the repo)
 
-In the Worker's **Settings**:
+Run the following — secrets live only on Cloudflare's side and never enter any repo file:
 
-- **Variables and Secrets**: add `AUTH_TOKEN` (≥ 24 chars, e.g. `openssl rand -hex 32`); optional `RETENTION_DAYS`
-- **Triggers → Cron**: add `0 3 * * *`
+```bash
+npx wrangler secret put AUTH_TOKEN   # generate a strong one: openssl rand -hex 32
+```
 
-The `DB` binding is declared in `wrangler.toml` and picked up automatically.
+Optionally set `RETENTION_DAYS` the same way. The `DB` binding and cron are declared in `wrangler.toml` and picked up automatically.
 
 ### 4. Deploy
 
-From now on, `git push` to `main` builds and deploys automatically.
+`git push` to `main` builds and deploys automatically.
 
 ### Upgrading an existing deployment
 
