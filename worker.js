@@ -1785,7 +1785,13 @@ async function extractSession(request, env) {
         .bind(await sha256Hex(value.slice(5)))
         .first();
       if (row && row.expires_at > nowTimestamp()) {
-        return { wxId: row.wx_id, level: Math.max(1, Number(row.level) || 1) };
+        const rawLevel = Number(row.level);
+        // 等级 0 = 拉黑，必须原样保留；仅对无效值兜底为 1
+        const level =
+          row.level != null && Number.isInteger(rawLevel)
+            ? Math.max(0, Math.min(rawLevel, LEVEL_MAX))
+            : 1;
+        return { wxId: row.wx_id, level };
       }
     } catch {}
   }
