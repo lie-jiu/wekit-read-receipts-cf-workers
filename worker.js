@@ -1066,7 +1066,11 @@ tr:hover td{background:#0f172a80}
 .empty-row td{text-align:center;padding:2.5rem 1rem;color:#475569;font-size:.85rem}
 .stats{display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:#0f172a;border-bottom:1px solid #334155;font-size:.78rem;color:#64748b}
 .stats .count{color:#94a3b8;font-weight:600}
-select{padding:.3rem .4rem;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.8rem;outline:none}
+.level-editor{display:inline-flex;align-items:center;gap:.25rem}
+.level-editor .btn{padding:.2rem .55rem;line-height:1;font-size:.85rem}
+.level-input{width:3.2rem;text-align:center;padding:.25rem .3rem;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.8rem;outline:none;-moz-appearance:textfield}
+.level-input::-webkit-outer-spin-button,.level-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.level-input:focus{border-color:#3b82f6}
 .toast-container{position:fixed;top:1rem;right:1rem;z-index:1000;display:flex;flex-direction:column;gap:.5rem}
 .toast{display:flex;align-items:center;gap:.5rem;padding:.65rem 1rem;border-radius:8px;font-size:.85rem;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);animation:toast-in .25s ease-out;max-width:360px}
 .toast-success{background:#065f46;color:#a7f3d0;border:1px solid #059669}
@@ -1205,13 +1209,14 @@ async function loadUsers() {
     $("userCount").textContent = data.length;
     $("userTbody").innerHTML = data
       .map((u) => {
-        const opts = Array.from({ length: 20 }, (_, i) =>
-          '<option value="' + (i + 1) + '"' + (u.level === i + 1 ? " selected" : "") + ">" + (i + 1) + "</option>"
-        ).join("");
         return (
           "<tr>" +
           '<td class="uuid-col">' + esc(u.wxId) + "</td>" +
-          '<td><select class="level-select" data-wxid="' + escAttr(u.wxId) + '">' + opts + "</select></td>" +
+          '<td><span class="level-editor" data-wxid="' + escAttr(u.wxId) + '">' +
+          '<button type="button" class="btn btn-outline btn-sm level-minus" aria-label="Decrease level">−</button>' +
+          '<input class="level-input" type="number" min="0" max="99" value="' + u.level + '" />' +
+          '<button type="button" class="btn btn-outline btn-sm level-plus" aria-label="Increase level">+</button>' +
+          "</span></td>" +
           '<td class="ts-col">' + esc(u.createdAt) + "</td>" +
           '<td class="flex">' +
           '<button class="btn btn-outline btn-sm act-setpass" data-wxid="' + escAttr(u.wxId) + '">Set password</button>' +
@@ -1333,14 +1338,29 @@ function initAdminHandlers() {
   ut.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
+    const editor = btn.closest(".level-editor");
+    if (editor) {
+      const input = editor.querySelector(".level-input");
+      let v = parseInt(input.value, 10);
+      if (Number.isNaN(v)) v = 0;
+      v = btn.classList.contains("level-plus") ? Math.min(99, v + 1) : Math.max(0, v - 1);
+      input.value = v;
+      saveLevel(editor.dataset.wxid, v);
+      return;
+    }
     const wxid = btn.dataset.wxid;
     if (btn.classList.contains("act-setpass")) openSetPass(wxid);
     else if (btn.classList.contains("act-del-user")) askDeleteUser(wxid);
   });
   ut.addEventListener("change", (e) => {
-    const sel = e.target.closest(".level-select");
-    if (!sel) return;
-    saveLevel(sel.dataset.wxid, sel.value);
+    const input = e.target.closest(".level-input");
+    if (!input) return;
+    const editor = input.closest(".level-editor");
+    let v = parseInt(input.value, 10);
+    if (Number.isNaN(v)) v = 0;
+    v = Math.max(0, Math.min(99, v));
+    input.value = v;
+    saveLevel(editor.dataset.wxid, v);
   });
   const mt = $("msgTbody");
   mt.addEventListener("click", (e) => {
@@ -1370,7 +1390,7 @@ const AUTH_RATE_LIMIT = 5; // 注册/登录/改密：每 IP 每分钟最多 5 �
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 const PBKDF2_ITERATIONS = 100000; // 密码哈希迭代次数
-const LEVEL_MAX = 100;
+const LEVEL_MAX = 99;
 const WXID_RE = /^wxid_[a-z0-9]{14}$/;
 
 const SECURITY_HEADERS = {
@@ -1615,7 +1635,7 @@ async function destroySession(request, db) {
 // ── 等级配额：仅在被注册新消息时惰性清理 ────────────────
 // 等级 N = 保留 N 条消息 × N 个月；超量时删除最早的消息，过期时删除整批
 async function enforceQuota(db, wxId, level) {
-  const n = Math.max(1, Math.min(Number(level) || 1, LEVEL_MAX));
+  const n = Math.max(0, Math.min(Number(level) || 0, LEVEL_MAX));
   const cutoff = new Date(Date.now() - n * 30 * 24 * 3600 * 1000)
     .toISOString()
     .replace("T", " ")
@@ -1802,6 +1822,10 @@ async function handleRequest(request, env) {
     if (!user) {
       return json({ error: "Forbidden: wxId is not registered" }, 403);
     }
+    // 等级为 0 等同于拉黑，禁止注册消息
+    if (user.level === 0) {
+      return json({ error: "Forbidden: account is blocked (level 0)" }, 403);
+    }
     const id = await computeId(wxId, content, createTime);
     const ts = nowTimestamp();
     const res = await env.DB.prepare(
@@ -1905,8 +1929,8 @@ async function handleRequest(request, env) {
       const body = await request.json();
       const wxId = String(body.wxId || "");
       const level = Number(body.level);
-      if (!wxId || !Number.isInteger(level) || level < 1 || level > LEVEL_MAX) {
-        return json({ error: `Invalid wxId or level (must be integer 1-${LEVEL_MAX})` }, 400);
+      if (!wxId || !Number.isInteger(level) || level < 0 || level > LEVEL_MAX) {
+        return json({ error: `Invalid wxId or level (must be integer 0-${LEVEL_MAX})` }, 400);
       }
       const res = await env.DB.prepare("UPDATE users SET level = ? WHERE wx_id = ?")
         .bind(level, wxId)

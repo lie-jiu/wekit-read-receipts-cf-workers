@@ -26,7 +26,7 @@ Sender                   Server                   Recipient
 ## Features
 
 - **Multi-user** — wxId is the account, password login, strict data isolation (each user sees only their own messages)
-- **Level quotas** — new users are level 1 (keep 1 message for 1 month); level N keeps N messages for N months; admins can adjust levels
+- **Level quotas** — new users are level 1 (keep 1 message for 1 month); level N keeps N messages for N months (max 99). Level 0 = blocked, cannot register messages. Admins can adjust levels (0–99)
 - **Invite codes** — optional `INVITE_CODE` env var; when set, registration requires the code
 - **Admin backend** — `ADMIN` accounts can access `/admin` to manage users, adjust levels, and delete data
 - **Deterministic IDs** — Message ID = `SHA256(wxId + \0 + content + \0 + createTime)`, computed independently by client and server
@@ -73,7 +73,7 @@ The server uses a **multi-user wxId + password** system, with short-lived sessio
 
 ### Level Quotas
 
-New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months**. When registering a new message, the oldest message beyond the quota is auto-deleted (lazily, only at registration time). Admins can adjust levels in the backend.
+New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months** (max 99). When registering a new message, the oldest message beyond the quota is auto-deleted (lazily, only at registration time). **Level 0 = blocked**, cannot register messages. Admins can adjust levels (0–99) in the backend.
 
 ### Environment Variables
 
