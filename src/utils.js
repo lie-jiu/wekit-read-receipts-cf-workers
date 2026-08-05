@@ -1,4 +1,4 @@
-import { PBKDF2_ITERATIONS } from "./config.js";
+import { PBKDF2_ITERATIONS, SECURITY_HEADERS } from "./config.js";
 
 // ── 基础工具 ────────────────────────────────────────────
 
