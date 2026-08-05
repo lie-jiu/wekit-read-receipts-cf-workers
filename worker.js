@@ -1371,7 +1371,7 @@ const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 const PBKDF2_ITERATIONS = 100000; // 密码哈希迭代次数
 const LEVEL_MAX = 100;
-const WXID_RE = /^[A-Za-z0-9_-]{3,64}$/;
+const WXID_RE = /^wxid_[a-z0-9]{14}$/;
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -1706,7 +1706,7 @@ async function handleRequest(request, env) {
     const password2 = String(formData.get("password2") || "");
     const invite = String(formData.get("invite") || "").trim();
     if (!WXID_RE.test(wxId)) {
-      return json({ error: "wxId must be 3-64 characters of letters, digits, _ or -" }, 400);
+      return json({ error: "wxId must match pattern: wxid_ followed by 14 lowercase letters/digits (e.g. wxid_abc123def4567g)" }, 400);
     }
     if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
       return json({ error: `Password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters` }, 400);
