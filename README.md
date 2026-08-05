@@ -176,7 +176,16 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 
 ```
 ├── schema.sql          # D1 表定义 + 幂等迁移
-├── worker.js           # Worker 源码（API 路由 + 仪表盘前端）
+├── src/
+│   ├── index.js        # Worker 入口：路由分发 + 定时任务（fetch / scheduled）
+│   ├── auth.js         # 会话解析、Cookie、管理员判断、等级配额
+│   ├── config.js       # 常量与安全头 / CSP 配置
+│   ├── utils.js        # 工具函数：密码哈希、限流、审计、响应封装
+│   ├── png.js          # 追踪像素（1×1 PNG）
+│   └── pages/          # 前端页面模板（登录 / 仪表盘 / 管理后台）
+│       ├── login.js
+│       ├── dashboard.js
+│       └── admin.js
 ├── wrangler.toml       # Cloudflare Workers 配置（D1 绑定 + cron）
 ├── package.json
 └── LICENSE

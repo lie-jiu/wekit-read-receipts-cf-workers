@@ -174,7 +174,16 @@ Re-run `schema.sql` once. It is idempotent and will:
 
 ```
 ├── schema.sql          # D1 table definitions + idempotent migration
-├── worker.js           # Worker source (API routes + dashboard frontend)
+├── src/
+│   ├── index.js        # Worker entry: routing + scheduled tasks (fetch / scheduled)
+│   ├── auth.js         # Session parsing, cookies, admin checks, level quotas
+│   ├── config.js       # Constants, security headers / CSP config
+│   ├── utils.js        # Utilities: password hashing, rate limiting, audit, responses
+│   ├── png.js          # Tracking pixel (1×1 PNG)
+│   └── pages/          # Frontend page templates (login / dashboard / admin)
+│       ├── login.js
+│       ├── dashboard.js
+│       └── admin.js
 ├── wrangler.toml       # Cloudflare Workers config (D1 binding + cron)
 ├── package.json
 └── LICENSE

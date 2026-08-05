@@ -1,5 +1,5 @@
 name = "wekit-read-receipts-cf-workers"
-main = "worker.js"
+main = "src/index.js"
 compatibility_date = "2026-08-01"
 
 # D1 绑定：不填 database_id，首次部署时自动创建并绑定

@@ -2,7 +2,8 @@
   "name": "read-receipts",
   "version": "1.0.0",
   "description": "Message read-count tracking service on Cloudflare Workers + D1",
-  "main": "worker.js",
+  "type": "module",
+  "main": "src/index.js",
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
