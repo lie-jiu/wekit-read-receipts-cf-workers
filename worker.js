@@ -933,7 +933,7 @@ const LOGIN_HTML = `<!doctype html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Login — Read Receipts</title>
+<title data-i18n="title">Login — Read Receipts</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9C%89%EF%B8%8F%3C/text%3E%3C/svg%3E" />
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -952,33 +952,92 @@ button[type=submit]:disabled{opacity:.6;cursor:not-allowed}
 .msg{margin-top:.9rem;font-size:.8rem;color:#fca5a5;min-height:1.2em;text-align:center}
 .hint{font-size:.72rem;color:#64748b;margin:-.2rem 0 .6rem}
 .hidden{display:none}
+.lang-toggle{position:fixed;top:1rem;right:1rem;font-size:.7rem;font-weight:600;padding:.25rem .5rem;border-radius:4px;background:transparent;color:#64748b;border:1px solid #475569;cursor:pointer;letter-spacing:.03em}
+.lang-toggle:hover{color:#e2e8f0;border-color:#94a3b8}
 </style>
 </head>
 <body>
+<button type="button" class="lang-toggle" onclick="toggleLang()">中 / EN</button>
 <div class="card">
-<h1>&#128274; Read Receipts</h1>
-<p>Log in with your wxId account, or register a new one.</p>
+<h1 data-i18n="title">&#128274; Read Receipts</h1>
+<p data-i18n="subtitle">Log in with your wxId account, or register a new one.</p>
 <div class="tabs">
-  <button type="button" id="tabLogin" class="tab active" onclick="switchTab('login')">Login</button>
-  <button type="button" id="tabRegister" class="tab" onclick="switchTab('register')">Register</button>
+  <button type="button" id="tabLogin" class="tab active" onclick="switchTab('login')" data-i18n="tabLogin">Login</button>
+  <button type="button" id="tabRegister" class="tab" onclick="switchTab('register')" data-i18n="tabRegister">Register</button>
 </div>
 <form id="loginForm" autocomplete="on">
-  <input id="loginWxid" placeholder="wxId" autocomplete="username"/>
-  <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password"/>
-  <button type="submit" id="loginBtn">Unlock</button>
+  <input id="loginWxid" placeholder="wxId" autocomplete="username" data-i18n="phWxid" data-i18n-placeholder/>
+  <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" data-i18n="phPassword" data-i18n-placeholder/>
+  <button type="submit" id="loginBtn" data-i18n="unlock">Unlock</button>
 </form>
 <form id="registerForm" class="hidden" autocomplete="on">
-  <input id="regWxid" placeholder="wxId (3-64 letters / digits / _ -)" autocomplete="username"/>
-  <input id="regPass" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password"/>
-  <input id="regPass2" type="password" placeholder="Confirm password" autocomplete="new-password"/>
-  <div id="inviteWrap" class="hidden"><input id="regInvite" placeholder="Invite code"/></div>
-  <p class="hint">Level 1 accounts keep 1 message for 1 month. Registering more auto-removes the oldest.</p>
-  <button type="submit" id="regBtn">Create account</button>
+  <input id="regWxid" placeholder="wxId (3-64 letters / digits / _ -)" autocomplete="username" data-i18n="phRegWxid" data-i18n-placeholder/>
+  <input id="regPass" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" data-i18n="phRegPass" data-i18n-placeholder/>
+  <input id="regPass2" type="password" placeholder="Confirm password" autocomplete="new-password" data-i18n="phRegPass2" data-i18n-placeholder/>
+  <div id="inviteWrap" class="hidden"><input id="regInvite" placeholder="Invite code" data-i18n="phInvite" data-i18n-placeholder/></div>
+  <p class="hint" data-i18n="levelHint">Level 1 accounts keep 1 message for 1 month. Registering more auto-removes the oldest.</p>
+  <button type="submit" id="regBtn" data-i18n="createAccount">Create account</button>
 </form>
 <div id="msg" class="msg"></div>
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
+let lang = localStorage.getItem("lang") || "zh-CN";
+const translations = {
+  "zh-CN": {
+    title: "已读追踪",
+    subtitle: "使用 wxId 账号登录，或注册新账号。",
+    tabLogin: "登录",
+    tabRegister: "注册",
+    phWxid: "wxId",
+    phPassword: "密码",
+    unlock: "解锁",
+    phRegWxid: "wxId（3-64 位字母/数字/_ -）",
+    phRegPass: "密码（至少 8 位）",
+    phRegPass2: "确认密码",
+    phInvite: "邀请码",
+    levelHint: "等级 1 账号保留 1 条消息 1 个月。继续注册会自动删除最早的。",
+    createAccount: "创建账号",
+    loginFailed: "登录失败",
+    regFailed: "注册失败",
+    passMismatch: "两次输入的密码不一致",
+    networkError: "网络错误",
+  },
+  en: {
+    title: "Read Receipts",
+    subtitle: "Log in with your wxId account, or register a new one.",
+    tabLogin: "Login",
+    tabRegister: "Register",
+    phWxid: "wxId",
+    phPassword: "Password",
+    unlock: "Unlock",
+    phRegWxid: "wxId (3-64 letters / digits / _ -)",
+    phRegPass: "Password (min 8 chars)",
+    phRegPass2: "Confirm password",
+    phInvite: "Invite code",
+    levelHint: "Level 1 accounts keep 1 message for 1 month. Registering more auto-removes the oldest.",
+    createAccount: "Create account",
+    loginFailed: "Login failed",
+    regFailed: "Registration failed",
+    passMismatch: "Passwords do not match",
+    networkError: "Network error",
+  },
+};
+function t(key){ return translations[lang][key] || key; }
+function applyI18n(){
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    if (el.tagName === "TITLE") document.title = t(key);
+    else if ("i18nPlaceholder" in el.dataset) el.placeholder = t(key);
+    else el.textContent = t(key);
+  });
+}
+function toggleLang(){
+  lang = lang === "zh-CN" ? "en" : "zh-CN";
+  localStorage.setItem("lang", lang);
+  applyI18n();
+}
+applyI18n();
 function switchTab(name){
   $("tabLogin").classList.toggle("active", name === "login");
   $("tabRegister").classList.toggle("active", name === "register");
@@ -998,15 +1057,15 @@ $("loginForm").addEventListener("submit", async (e) => {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) { location.href = data.redirect || "/"; return; }
-    showMsg(data.error || "Login failed");
-  } catch { showMsg("Network error"); }
+    showMsg(data.error || t("loginFailed"));
+  } catch { showMsg(t("networkError")); }
   btn.disabled = false;
 });
 $("registerForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = $("regBtn"); btn.disabled = true;
   const p1 = $("regPass").value, p2 = $("regPass2").value;
-  if (p1 !== p2) { showMsg("Passwords do not match"); btn.disabled = false; return; }
+  if (p1 !== p2) { showMsg(t("passMismatch")); btn.disabled = false; return; }
   try {
     const res = await fetch("/auth/register", {
       method: "POST",
@@ -1015,8 +1074,8 @@ $("registerForm").addEventListener("submit", async (e) => {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) { location.href = data.redirect || "/"; return; }
-    showMsg(data.error || "Registration failed");
-  } catch { showMsg("Network error"); }
+    showMsg(data.error || t("regFailed"));
+  } catch { showMsg(t("networkError")); }
   btn.disabled = false;
 });
 fetch("/auth/status").then(r => r.json()).then(s => { if (s.invite_required) $("inviteWrap").classList.remove("hidden"); }).catch(() => {});
