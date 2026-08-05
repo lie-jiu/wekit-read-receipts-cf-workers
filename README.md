@@ -100,8 +100,11 @@ Sender                   Server                   Recipient
 
 ```bash
 npx wrangler secret put INVITE_CODE   # 可选
-npx wrangler variable put ADMIN       # 可选，如：wxid_a,wxid_b
+npx wrangler secret put ADMIN         # 可选，如：wxid_a,wxid_b
 ```
+
+> [!IMPORTANT]
+> 请将 `INVITE_CODE`、`ADMIN` 均设置为 **Secret** 而非普通变量。若使用 Workers Builds（Git 集成）部署，每次构建会用仓库中的 `wrangler.toml` 同步覆盖配置，只存在于 dashboard 的普通变量会被删除；Secret 由平台独立管理，不受影响。
 
 ## 安全特性
 
@@ -150,7 +153,10 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 5. 在 D1 数据库 Console 执行一次 `schema.sql`
 
 > [!NOTE]
-> 可选配置环境变量：`INVITE_CODE`（邀请码）、`ADMIN`（管理员 wxid 列表）。
+> 可选配置环境变量：`INVITE_CODE`（邀请码）、`ADMIN`（管理员 wxid 列表），均以 Secret 形式设置（见「环境变量」章节的说明）。
+
+> [!IMPORTANT]
+> Workers Builds 以仓库 `wrangler.toml` 为配置唯一来源：dashboard 中手动配置的普通变量会在每次构建时被覆盖删除，因此 `INVITE_CODE`、`ADMIN` 必须存为 Secret。
 
 ### 升级现有部署
 

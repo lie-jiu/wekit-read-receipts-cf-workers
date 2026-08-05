@@ -98,8 +98,11 @@ New users are **level 1**. Level N means: keep up to **N messages**, each for up
 
 ```bash
 npx wrangler secret put INVITE_CODE   # optional
-npx wrangler variable put ADMIN       # optional, e.g.: wxid_a,wxid_b
+npx wrangler secret put ADMIN         # optional, e.g.: wxid_a,wxid_b
 ```
+
+> [!IMPORTANT]
+> Set both `INVITE_CODE` and `ADMIN` as **Secrets**, not plaintext variables. When deploying via Workers Builds (Git integration), every build syncs configuration from the `wrangler.toml` in the repo, deleting plaintext variables that only exist in the dashboard. Secrets are managed independently by the platform and are never touched by builds.
 
 ## Security Features
 
@@ -148,7 +151,10 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 5. Run `schema.sql` once in the D1 database console
 
 > [!NOTE]
-> Optional env vars: `INVITE_CODE` (invite code), `ADMIN` (admin wxId list).
+> Optional env vars: `INVITE_CODE` (invite code), `ADMIN` (admin wxId list), set as Secrets (see the Environment Variables section).
+
+> [!IMPORTANT]
+> Workers Builds treats the repo's `wrangler.toml` as the single source of truth: plaintext variables configured in the dashboard are overwritten/removed on every build. Store `INVITE_CODE` and `ADMIN` as Secrets instead.
 
 ### Upgrading an existing deployment
 
