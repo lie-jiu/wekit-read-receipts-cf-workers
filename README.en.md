@@ -148,6 +148,9 @@ Re-run `schema.sql` once. It is idempotent and will:
 > [!NOTE]
 > Re-running `schema.sql` truncates the `sessions` table (all users must log in again once).
 
+> [!IMPORTANT]
+> To wipe all data, run `DELETE FROM messages; DELETE FROM reads; DELETE FROM users; DELETE FROM sessions; DELETE FROM audit_logs;` (or delete tables individually). **Do not delete the D1 database itself.** Deleting it assigns a new database ID, so the worker binding points to a database that no longer exists (the binding shows "Not Found" when opened).
+
 ## Project Structure
 
 ```

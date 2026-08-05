@@ -150,6 +150,9 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 > [!NOTE]
 > 重跑 `schema.sql` 会清空 `sessions` 表（全体用户需重新登录一次）。
 
+> [!IMPORTANT]
+> 需要清空数据时请执行 `DELETE FROM messages; DELETE FROM reads; DELETE FROM users; DELETE FROM sessions; DELETE FROM audit_logs;`（或逐表删除），**不要删除 D1 数据库本身**。删除 D1 库会生成新的数据库 ID，worker 的绑定将指向已不存在的旧库而失效（点开绑定时报 Not Found）。
+
 ## 项目结构
 
 ```
