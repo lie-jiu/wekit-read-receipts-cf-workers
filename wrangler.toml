@@ -2,11 +2,12 @@ name = "wekit-read-receipts-cf-workers"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# D1 绑定：不填 database_id，首次部署时自动创建并绑定
-# （Automatic provisioning，需 Wrangler ≥ 4.45.0；ID 仅存于 dashboard，不写回仓库）
+# D1 绑定：固定为实际数据库 ID（删库重建后自动创建的库）
+# 若更换/重建数据库，更新此 ID 后重新部署即可
 [[d1_databases]]
 binding = "DB"
 database_name = "read-receipts"
+database_id = "4f1e45df-3b29-454e-b292-cd6ccf1f6d71"
 
 # 定时清理过期会话（及可选的数据保留策略 RETENTION_DAYS）
 [triggers]
