@@ -810,7 +810,7 @@ function htmlPage(session) { return `<!doctype html>
               (r) => \`<tr class="clickable-row" data-id="\${escAttr(r.id)}" data-content="\${escAttr(r.content)}" onclick="toggleDetail(this)">
       <td class="msg-col">\${esc(r.content)}</td>
       <td class="reads-col">\${esc(r.reads)}</td>
-      <td class="ts-col">\${esc(r.timestamp)}</td>
+      <td class="ts-col">\${esc(fmtTs(r.timestamp))}</td>
     </tr>\`,
             )
             .join("");
@@ -854,6 +854,21 @@ function htmlPage(session) { return `<!doctype html>
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#39;");
+      }
+
+      /* 服务端时间戳为 UTC "YYYY-MM-DD HH:MM:SS"，转换为本地时区同格式 */
+      function fmtTs(s) {
+        const m = /^(\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/.exec(
+          String(s || "")
+        );
+        if (!m) return String(s || "");
+        const d = new Date(
+          Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
+        );
+        const p = (n) => String(n).padStart(2, "0");
+        return \`\${d.getFullYear()}-\${p(d.getMonth() + 1)}-\${p(d.getDate())} \${p(
+          d.getHours()
+        )}:\${p(d.getMinutes())}:\${p(d.getSeconds())}\`;
       }
 
       /* ── detail panel ── */
@@ -903,7 +918,7 @@ function htmlPage(session) { return `<!doctype html>
             .map(
               (r) => \`<tr>
       <td class="ip-col">\${esc(r.ip)}</td>
-      <td class="ts-col">\${esc(r.timestamp)}</td>
+      <td class="ts-col">\${esc(fmtTs(r.timestamp))}</td>
     </tr>\`,
             )
             .join("");
@@ -914,8 +929,10 @@ function htmlPage(session) { return `<!doctype html>
       }
 
       /* ── keyboard ── */
+      let filterTimer = null;
       document.getElementById("msgFilter").addEventListener("input", () => {
-        loadAll();
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(loadAll, 300);
       });
 
       /* ── init ── */
@@ -1258,7 +1275,7 @@ const translations = {
     levelUpdated: "等级已更新",
     levelFail: "等级更新失败",
     passTooShort: "密码至少 8 位",
-    setPassOk: "已为",
+    setPassOk: "已为 {0} 设置新密码",
     setPassFail: "设置密码失败",
     delUserTitle: "删除用户？",
     delUserBody: "删除用户「{0}」及其全部消息和已读记录？此操作不可撤销。",
@@ -1305,7 +1322,7 @@ const translations = {
     levelUpdated: "Level updated",
     levelFail: "Failed to update level",
     passTooShort: "Password must be at least 8 characters",
-    setPassOk: "Password set for",
+    setPassOk: 'Password set for "{0}"',
     setPassFail: "Failed to set password",
     delUserTitle: "Delete user?",
     delUserBody: 'Delete user "{0}" and all their messages and reads? This cannot be undone.',
@@ -1356,6 +1373,13 @@ function esc(s){
 function escAttr(s){
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
+function fmtTs(s){
+  const m = /^(\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/.exec(String(s || ""));
+  if (!m) return String(s || "");
+  const d = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
 function toast(message, type = "info"){
   const el = document.createElement("div");
   el.className = "toast toast-" + type;
@@ -1397,7 +1421,7 @@ async function loadUsers() {
           '<input class="level-input" type="number" min="0" max="99" value="' + u.level + '" />' +
           '<button type="button" class="btn btn-outline btn-sm level-plus" aria-label="Increase level">+</button>' +
           "</span></td>" +
-          '<td class="ts-col">' + esc(u.createdAt) + "</td>" +
+          '<td class="ts-col">' + esc(fmtTs(u.createdAt)) + "</td>" +
           '<td class="flex">' +
           '<button class="btn btn-outline btn-sm act-setpass" data-wxid="' + escAttr(u.wxId) + '">' + t("setPassword") + "</button>" +
           '<button class="btn btn-danger btn-sm act-del-user" data-wxid="' + escAttr(u.wxId) + '">' + t("delete") + "</button>" +
@@ -1439,7 +1463,7 @@ passSave.onclick = async () => {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { toast(data.error || t("setPassFail"), "error"); return; }
-    toast(t("setPassOk") + " " + targetWxId, "success");
+    toast(t("setPassOk", targetWxId), "success");
     closePass();
   } catch (e) { toast(t("networkError"), "error"); }
 };
@@ -1475,7 +1499,7 @@ async function loadMsgs() {
               '<td class="uuid-col">' + esc(r.wxId) + "</td>" +
               '<td class="msg-col" title="' + escAttr(r.content) + '">' + esc(r.content) + "</td>" +
               "<td>" + esc(r.reads) + "</td>" +
-              '<td class="ts-col">' + esc(r.timestamp) + "</td>" +
+              '<td class="ts-col">' + esc(fmtTs(r.timestamp)) + "</td>" +
               '<td><button class="btn btn-danger btn-sm act-del-msg" data-id="' + escAttr(r.id) + '">' + t("delete") + "</button></td>" +
               "</tr>"
           )
@@ -1571,6 +1595,7 @@ const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 const PBKDF2_ITERATIONS = 100000; // 密码哈希迭代次数
 const LEVEL_MAX = 99;
+const AUDIT_LOG_RETENTION_DAYS = 30; // 审计日志保留天数
 const WXID_RE = /^wxid_[a-z0-9]{14}$/;
 
 const SECURITY_HEADERS = {
@@ -2118,7 +2143,12 @@ async function handleRequest(request, env) {
       if (!res?.success || (res.meta?.changes ?? 0) === 0) {
         return json({ error: "User not found" }, 404);
       }
-      await audit(env.DB, "set_level", `${wxId} -> ${level}`);
+      // 等级 0 = 拉黑：立即清空其全部消息与已读记录（账号保留）
+      if (level === 0) {
+        await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
+      }
+      await audit(env.DB, "set_level", level === 0 ? `${wxId} -> 0 (data wiped)` : `${wxId} -> ${level}`);
       return json({ ok: true });
     }
 
@@ -2340,20 +2370,18 @@ export default {
     }
   },
 
-  // 定时清理：过期会话；可选 RETENTION_DAYS 数据保留策略
+  // 定时清理：过期会话、审计日志、孤儿已读记录
   async scheduled(event, env) {
     try {
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?")
         .bind(nowTimestamp())
         .run();
-      if (env.RETENTION_DAYS) {
-        const cutoff = new Date(Date.now() - Number(env.RETENTION_DAYS) * 86400000)
-          .toISOString()
-          .replace("T", " ")
-          .slice(0, 19);
-        await env.DB.prepare("DELETE FROM reads WHERE timestamp < ?").bind(cutoff).run();
-        await env.DB.prepare("DELETE FROM messages WHERE timestamp < ?").bind(cutoff).run();
-      }
+      const auditCutoff = new Date(Date.now() - AUDIT_LOG_RETENTION_DAYS * 86400000)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 19);
+      await env.DB.prepare("DELETE FROM audit_logs WHERE timestamp < ?").bind(auditCutoff).run();
+      await env.DB.prepare("DELETE FROM reads WHERE id NOT IN (SELECT id FROM messages)").run();
     } catch {}
   },
 };

@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 A message read-count tracking service built on **Cloudflare Workers** + **D1**. Embed a 1x1 transparent tracking pixel in your messages — when recipients open the message, their IP is recorded and deduplicated read counts are returned.
 
-> ⚠️ **Privacy disclosure**: This service records recipients' IP addresses and exact open timestamps without their knowledge. In China this falls under the Personal Information Protection Law (PIPL) — inform recipients before tracking, and consider data minimization (e.g. set `RETENTION_DAYS`). WeChat's terms of service prohibit third-party tracking of this kind; your account may be at risk.
+> ⚠️ **Privacy disclosure**: This service records recipients' IP addresses and exact open timestamps without their knowledge. In China this falls under the Personal Information Protection Law (PIPL) — inform recipients before tracking, and consider data minimization (wipe data in the admin console when done). WeChat's terms of service prohibit third-party tracking of this kind; your account may be at risk.
 
 ## How It Works
 
@@ -26,7 +26,7 @@ Sender                   Server                   Recipient
 ## Features
 
 - **Multi-user** — wxId is the account, password login, strict data isolation (each user sees only their own messages)
-- **Level quotas** — new users are level 1 (keep 1 message for 1 month); level N keeps N messages for N months (max 99). Level 0 = blocked, cannot register messages. Admins can adjust levels (0–99)
+- **Level quotas** — new users are level 1 (keep 1 message for 1 month); level N keeps N messages for N months (max 99). Level 0 = blocked: cannot register messages, and setting level to 0 immediately wipes that account's data. Admins can adjust levels (0–99)
 - **Invite codes** — optional `INVITE_CODE` env var; when set, registration requires the code
 - **Admin backend** — `ADMIN` accounts can access `/admin` to manage users, adjust levels, and delete data
 - **Deterministic IDs** — Message ID = `SHA256(wxId + \0 + content + \0 + createTime)`, computed independently by client and server
@@ -62,6 +62,20 @@ Sender                   Server                   Recipient
 | DELETE | `/admin/messages?wxId=` | Admin | Delete all data for a user |
 | DELETE | `/admin/messages/{id}` | Admin | Delete a single message |
 
+## WeKit Client Compatibility
+
+This service is also called by the WeKit client module (third-party, not modifiable), which uses the following three **unauthenticated** endpoints, relying only on the precondition that "wxId is a registered account":
+
+- `POST /register` — the client submits the message plaintext (wxId + content + createTime) when sending
+- `GET /count` — the client polls once every 1–5 seconds for each message currently on screen
+- `GET /pixel` — loaded when a recipient opens the message
+
+Please be aware:
+
+- **The invite code only gates account registration** (`/auth/register`), not message registration. Anyone who knows a user's wxId can register messages on their behalf
+- The level quota uses lazy cleanup that **deletes the oldest messages when over quota**: registering N+1 messages against a wxId triggers deletion of all its messages (N ≤ 99). Use this only within a trusted circle, and use `ADMIN` to manage accounts
+- The server receives message plaintext (needed to match read records) — this is inherent to the design
+
 ## Authentication
 
 The server uses a **multi-user wxId + password** system, with short-lived session cookies for the dashboard:
@@ -73,7 +87,7 @@ The server uses a **multi-user wxId + password** system, with short-lived sessio
 
 ### Level Quotas
 
-New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months** (max 99). When registering a new message, the oldest message beyond the quota is auto-deleted (lazily, only at registration time). **Level 0 = blocked**, cannot register messages. Admins can adjust levels (0–99) in the backend.
+New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months** (max 99). When registering a new message, the oldest message beyond the quota is auto-deleted, and messages older than N months are purged (both lazily, only at registration time). **Level 0 = blocked**: cannot register messages, and setting a user to level 0 immediately wipes all their messages and reads (the account is kept and can be re-promoted at any time). Admins can adjust levels (0–99) in the backend.
 
 ### Environment Variables
 
@@ -98,8 +112,7 @@ npx wrangler variable put ADMIN       # optional, e.g.: wxid_a,wxid_b
 - **Trusted client IP only** — `CF-Connecting-IP`; client-controlled headers are ignored
 - **Security headers** — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on all responses
 - **Input validation** — length limits on register fields, LIKE-wildcard escaping, malformed-URL handling, wxId format validation
-- **Audit log** — every bulk/sender delete is recorded in the `audit_logs` table
-- **Optional retention** — set `RETENTION_DAYS` to auto-purge messages/reads older than N days (daily cron, default 03:00 UTC)
+- **Audit log** — every bulk/sender delete is recorded in the `audit_logs` table (auto-purged after 30 days)
 
 ## Deployment
 
@@ -135,7 +148,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 5. Run `schema.sql` once in the D1 database console
 
 > [!NOTE]
-> Optional env vars: `INVITE_CODE` (invite code), `ADMIN` (admin wxId list), `RETENTION_DAYS` (data retention days).
+> Optional env vars: `INVITE_CODE` (invite code), `ADMIN` (admin wxId list).
 
 ### Upgrading an existing deployment
 
