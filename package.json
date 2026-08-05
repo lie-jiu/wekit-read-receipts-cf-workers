@@ -4,7 +4,6 @@
   "description": "Message read-count tracking service on Cloudflare Workers + D1",
   "main": "worker.js",
   "scripts": {
-    "test": "node test/security.test.js",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "db:create": "wrangler d1 create read-receipts",

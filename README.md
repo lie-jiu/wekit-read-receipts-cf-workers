@@ -27,9 +27,13 @@ Sender                   Server                   Recipient
 
 ## 功能特性
 
+- **多用户** — wxid 即账号，密码登录，数据严格隔离（每个用户只能看到自己的消息）
+- **等级配额** — 新注册用户等级 1（保留 1 条消息 × 1 个月），等级 N 可保留 N 条 × N 个月，管理员可调整
+- **邀请码** — 可选 `INVITE_CODE` 环境变量，配置后注册需填写邀请码
+- **管理员后台** — `ADMIN` 账号可访问 `/admin` 管理用户、调整等级、删除数据
 - **确定性 ID** — 消息 ID = `SHA256(wxId + \0 + content + \0 + createTime)`，客户端与服务端独立计算，结果一致
 - **IP 去重** — 同一 IP 多次打开只计为 1 次已读（通过存储层的唯一索引强制执行）
-- **仪表盘** — 深色主题、响应式界面，支持 i18n（中文/English）、搜索、筛选、可展开的已读详情
+- **仪表盘** — 深色主题、响应式界面，支持 i18n（中文/English）、搜索、筛选、可展开的已读详情、修改密码
 - **Serverless（无服务器）** — 运行于 Cloudflare Workers 边缘网络，使用 D1 SQLite 数据库
 - **零成本** — 免费额度内：每天 10 万次请求、D1 每天 5GB 读取
 
@@ -37,58 +41,65 @@ Sender                   Server                   Recipient
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |--------|------|------|-------------|
-| POST | `/register` | Bearer | 注册消息，返回 `{id}` |
+| POST | `/register` | — | 注册消息（无需登录，但 wxid 必须是已注册账号），返回 `{id}` |
 | GET | `/pixel?wxId=&id=` | — | 追踪像素（1x1 PNG），记录读者 IP（仅对已注册的消息生效） |
-| GET | `/count?wxId=&id=` | Bearer | 获取去重后的已读次数 |
-| GET | `/messages?q=` | Bearer | 列出所有消息及其已读次数 |
-| DELETE | `/messages` | Bearer | 删除所有消息（记录审计日志） |
-| GET | `/messages/{wxId}?q=` | Bearer | 按发送者列出消息 |
-| DELETE | `/messages/{wxId}` | Bearer | 删除某发送者的全部消息（记录审计日志） |
-| GET | `/reads/{id}` | Bearer | 获取某条消息的详细已读记录 |
-| GET | `/` | Cookie | 仪表盘前端 |
-| POST | `/auth/verify` | — | 提交 token，设置会话 cookie，重定向到 `/` |
-| GET | `/auth/status` | — | 返回 `{auth_required: bool, weak_token: bool}` |
+| GET | `/count?wxId=&id=` | — | 获取消息的去重已读次数（无需登录，参数携带 wxId） |
+| GET | `/messages?q=` | Cookie | 列出本人的全部消息及其已读次数 |
+| DELETE | `/messages` | Cookie | 删除本人的全部消息（记录审计日志） |
+| GET | `/messages/{wxId}?q=` | Cookie | 按发送者列出消息（仅限本人） |
+| DELETE | `/messages/{wxId}` | Cookie | 删除某发送者的全部消息（仅限本人，记录审计日志） |
+| GET | `/reads/{id}` | Cookie | 获取本人某条消息的详细已读记录 |
+| GET | `/` | Cookie | 仪表盘前端（未登录跳转登录页） |
+| GET | `/admin` | Cookie | 管理员后台（仅 `ADMIN` 账号） |
+| POST | `/auth/register` | — | 注册账号（wxid + 密码 + 邀请码） |
+| POST | `/auth/verify` | — | wxid + 密码登录，设置会话 cookie |
+| POST | `/auth/logout` | Cookie | 销毁当前会话 |
+| POST | `/auth/password` | Cookie | 修改自己的密码 |
+| GET | `/auth/status` | — | 返回 `{auth_required: bool, invite_required: bool}` |
+| GET | `/admin/users` | Admin | 列出所有用户 |
+| POST | `/admin/level` | Admin | 调整用户等级 |
+| POST | `/admin/password` | Admin | 为任意用户设置新密码 |
+| DELETE | `/admin/users/{wxId}` | Admin | 删除用户及其全部数据 |
+| GET | `/admin/messages` | Admin | 全量消息浏览 |
+| DELETE | `/admin/messages?wxId=` | Admin | 删除某用户的全部数据 |
+| DELETE | `/admin/messages/{id}` | Admin | 删除单条消息 |
 
 ## 身份验证
 
-服务端使用静态 token（`AUTH_TOKEN`）访问 API，仪表盘使用短期会话 cookie：
+服务端使用 **wxid 即账号 + 密码** 的多用户体系，仪表盘使用短期会话 cookie：
 
-- **未设置** — 无需鉴权（开放访问）
-- **已设置（≥ 24 字符）** — 除 `/pixel`、`/auth/verify`、`/auth/status`、`/favicon.ico` 之外的所有端点都需要鉴权
-- **已设置（过短）** — 所有管理端点返回 `503`，直到 token 轮换为 ≥ 24 字符
+- **注册**：首次使用访问登录页 → 切换到「注册」→ 填写 wxid + 密码（≥8 位）+ 邀请码 → 自动登录
+- **登录**：wxid + 密码 → POST 到 `/auth/verify` → 设置 `__Host-session` cookie（HttpOnly、Secure、SameSite=Lax，30 天）→ 重定向到 `/`。管理员需手动访问 `/admin` 进入后台
+- **会话**：服务端只存储会话 ID 的 SHA-256 哈希，cookie 本身从不包含密码
+- **数据隔离**：所有 `/messages*`、`/reads/*`、`/count`、`/register` 端点强制限定为当前登录账号的 wxid
 
-### 登录流程
+### 等级配额
 
-1. 访问 `/` → 跳转到登录页
-2. 输入 token → POST 到 `/auth/verify` → 设置 `__Host-session` cookie（HttpOnly、Secure、SameSite=Lax，30 天）→ 重定向到 `/`
-3. 服务端只存储会话 ID 的 SHA-256 哈希；cookie 本身从不包含 `AUTH_TOKEN`
+新注册用户为 **等级 1**。等级 N 表示：最多可保留 **N 条消息**，每条最多保留 **N 个月**。注册新消息时，超出配额的最早消息自动删除（仅注册时惰性清理）。管理员可在后台调整用户等级。
 
-旧版 `auth_token` cookie（其中包含原始 token）在其过期前仍会被接受，以保持向后兼容。
+### 环境变量
 
-### API 访问
-
-在 `Authorization` 请求头中携带 token：
-
-```
-Authorization: Bearer <REDACTED>
-```
-
-### 使用 Wrangler 配置
+| 变量 | 必需 | 说明 |
+|------|------|------|
+| `INVITE_CODE` | 否 | 邀请码。配置后注册必须填写；留空则开放注册 |
+| `ADMIN` | 否 | 逗号分隔的 wxid 列表，这些账号登录后可访问 `/admin` 管理后台。未配置则无管理员 |
 
 ```bash
-npx wrangler secret put AUTH_TOKEN   # 生成强 token：openssl rand -hex 32
+npx wrangler secret put INVITE_CODE   # 可选
+npx wrangler variable put ADMIN       # 可选，如：wxid_a,wxid_b
 ```
 
 ## 安全特性
 
-- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/auth/verify`：每 IP 每分钟 5 次（登录端点失败即拒绝，fail-closed）
+- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/auth/verify`、`/auth/register`、`/auth/password`：每 IP 每分钟 5 次（fail-closed）
+- **密码哈希** — PBKDF2-SHA256，每用户随机 salt，10 万次迭代（Web Crypto，Workers 原生支持）
 - **已注册消息校验** — `/pixel` 忽略未注册消息的读取（阻止灌库攻击）
 - **存储级去重** — `reads(id, ip)` 唯一索引 + `INSERT OR IGNORE`
-- **恒定时间 token 比较** — 通过 SHA-256 摘要比较；登录失败附加随机延迟
+- **恒定时间密码比较** — 通过 SHA-256 摘要比较；登录失败附加随机延迟
 - **会话 cookie** — 随机 ID、静态哈希、30 天有效期、`__Host-` 前缀、Secure/HttpOnly/SameSite=Lax
 - **仅信任客户端 IP** — 只读取 `CF-Connecting-IP`；忽略客户端可控的请求头
 - **安全响应头** — 所有响应均携带 CSP、`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`
-- **输入校验** — register 字段长度限制、LIKE 通配符转义、畸形 URL 处理
+- **输入校验** — 注册字段长度限制、LIKE 通配符转义、畸形 URL 处理、wxid 格式校验
 - **审计日志** — 每次批量/按发送者删除都会记录到 `audit_logs` 表
 - **可选保留策略** — 设置 `RETENTION_DAYS` 可自动清理超过 N 天的消息/已读记录（每日 cron，默认 03:00 UTC）
 
@@ -102,7 +113,6 @@ npx wrangler secret put AUTH_TOKEN   # 生成强 token：openssl rand -hex 32
 git clone https://github.com/lie-jiu/wekit-read-receipts-cf-workers
 cd wekit-read-receipts-cf-workers
 npx wrangler login
-npx wrangler secret put AUTH_TOKEN   # openssl rand -hex 32
 npx wrangler deploy                  # 首次部署自动创建 D1 数据库
 ```
 
@@ -123,22 +133,22 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 1. fork 本仓库（或使用自己的仓库）
 2. Cloudflare Dashboard → **Workers & Pages → Create → Worker**，选择 **Workers Builds**
 3. **Connect to GitHub**，选择你的仓库；生产分支 `main`，构建命令留空
-4. 创建后设置密钥：Worker → **Settings → Variables and Secrets** → 添加 `AUTH_TOKEN`（≥ 24 字符）
-5. `git push` 到 `main` 自动构建部署；首次部署自动创建 D1 数据库
-6. 在 D1 数据库 Console 执行一次 `schema.sql`
+4. `git push` 到 `main` 自动构建部署；首次部署自动创建 D1 数据库
+5. 在 D1 数据库 Console 执行一次 `schema.sql`
 
 > [!NOTE]
-> 可选 `RETENTION_DAYS` 变量，按天数自动清理过期数据。
+> 可选配置环境变量：`INVITE_CODE`（邀请码）、`ADMIN`（管理员 wxid 列表）、`RETENTION_DAYS`（数据保留天数）。
 
 ### 升级现有部署
 
 重新执行一次 `schema.sql`。它是幂等的，会：
 
-- 创建 `sessions` 和 `audit_logs` 表
+- 创建 `users`、`sessions` 和 `audit_logs` 表
 - 对现有 `reads` 行去重，并添加 `(id, ip)` 唯一索引
 - （已重复打开过消息的现有读者只保留第一条记录）
 
-现有 `auth_token` cookie 在其过期前保持可用；下次登录会签发会话 cookie。
+> [!NOTE]
+> 重跑 `schema.sql` 会清空 `sessions` 表（全体用户需重新登录一次）。
 
 ## 项目结构
 
