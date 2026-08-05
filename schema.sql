@@ -12,16 +12,13 @@ CREATE TABLE IF NOT EXISTS reads (
     timestamp TEXT NOT NULL
 );
 
--- 用户账号：wxid 即账号，密码以 PBKDF2 哈希存储（pbkdf2$迭代次数$salt$hash）
 CREATE TABLE IF NOT EXISTS users (
     wx_id         TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
-    level         INTEGER NOT NULL DEFAULT 1,  -- 等级 N = 保留 N 条消息 × N 个月
+    level         INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT NOT NULL
 );
 
--- Dashboard 登录会话：cookie 中只存随机 ID，服务端仅保存其 SHA-256 哈希，并绑定用户 wxid。
--- 幂等迁移：重跑本文件会清空 sessions（旧会话失效，用户重新登录即可）。
 DROP TABLE IF EXISTS sessions;
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -30,7 +27,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at TEXT NOT NULL
 );
 
--- 管理操作审计日志（detail 字段中含 wxid）
 CREATE TABLE IF NOT EXISTS audit_logs (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -43,6 +39,5 @@ CREATE INDEX IF NOT EXISTS idx_messages_wx_id ON messages (wx_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
 CREATE INDEX IF NOT EXISTS idx_users_level ON users (level);
 
--- 迁移（可重复执行）：清理历史重复读取后建立唯一约束，防止存储被同 IP 重复写入撑爆
 DELETE FROM reads WHERE rowid NOT IN (SELECT MIN(rowid) FROM reads GROUP BY id, ip);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reads_id_ip ON reads (id, ip);
