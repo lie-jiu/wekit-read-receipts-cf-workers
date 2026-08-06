@@ -64,7 +64,7 @@ sequenceDiagram
 
 ## 账户与等级
 
-- **注册**：首次使用访问登录页 → 切换到「注册」→ 填写 wxid + 密码（≥8 位）+ 邀请码 → 自动登录
+- **注册**：首次使用访问登录页 → 切换到「注册」→ 填写 wxid + 密码（≥8 位）+ 邀请码 → 自动登录。也可以由管理员在 `/admin` 后台直接创建账号（wxid + 密码，默认等级 1，仅校验不重复）
 - **登录**：wxid + 密码 → POST 到 `/auth/verify` → 设置 `__Host-session` cookie（HttpOnly、Secure、SameSite=Lax，30 天）→ 重定向到 `/`。管理员需手动访问 `/admin` 进入后台
 - **会话**：服务端只存储会话 ID 的 SHA-256 哈希，cookie 本身从不包含密码
 - **数据隔离**：所有 `/messages*`、`/reads/*` 端点强制限定为当前登录账号的 wxid；`/count`、`/register` 为公开端点，通过请求中的 wxId 参数指定账号（见[客户端接入](#客户端接入)）
@@ -109,6 +109,7 @@ sequenceDiagram
 |------|------|------|
 | GET | `/admin` | 管理后台 |
 | GET | `/admin/users` | 列出所有用户 |
+| POST | `/admin/users` | 创建新用户（wxId + 密码，默认等级 1，仅校验不重复） |
 | POST | `/admin/level` | 调整用户等级（0–99） |
 | POST | `/admin/password` | 为任意用户设置新密码 |
 | DELETE | `/admin/users/{wxId}` | 删除用户及其全部数据 |

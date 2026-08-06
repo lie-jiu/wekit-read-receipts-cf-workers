@@ -64,7 +64,7 @@ Please be aware:
 
 ## Accounts & Levels
 
-- **Registration**: visit the login page → switch to "Register" → enter wxid + password (≥8 chars) + invite code → auto-login
+- **Registration**: visit the login page → switch to "Register" → enter wxid + password (≥8 chars) + invite code → auto-login. Admins can also create accounts directly in the `/admin` backend (wxId + password, default level 1, uniqueness check only)
 - **Login**: wxid + password → POST to `/auth/verify` → sets an `__Host-session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days) → redirects to `/`. Admins must manually visit `/admin` to access the backend
 - **Sessions**: the server stores only a SHA-256 hash of a random session ID; the cookie never contains the password
 - **Data isolation**: all `/messages*`, `/reads/*` endpoints are scoped to the currently logged-in account's wxid; `/count` and `/register` are public endpoints that address the account via the `wxId` parameter (see [Client Integration](#client-integration))
@@ -109,6 +109,7 @@ New users are **level 1**. Level N means: keep up to **N messages**, each for up
 |--------|------|-------------|
 | GET | `/admin` | Admin backend |
 | GET | `/admin/users` | List all users |
+| POST | `/admin/users` | Create a user (wxId + password, default level 1, uniqueness check only) |
 | POST | `/admin/level` | Adjust a user's level (0–99) |
 | POST | `/admin/password` | Set a new password for any user |
 | DELETE | `/admin/users/{wxId}` | Delete a user and all their data |
