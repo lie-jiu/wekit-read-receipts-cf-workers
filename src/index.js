@@ -18,6 +18,7 @@ import {
   chinaDayStartTimestamp,
   chinaDate,
   maskWxId,
+  maskContent,
 } from "./utils.js";
 import {
   extractSession,
@@ -447,7 +448,7 @@ async function handleRequest(request, env) {
         rows.map((r) => ({
           id: r.id,
           wxId: maskWxId(r.wx_id),
-          content: r.content,
+          content: maskContent(r.content),
           count: r.cnt,
           me: r.wx_id === session.wxId,
         }))

@@ -43,7 +43,7 @@ sequenceDiagram
 - **Deterministic IDs** — Message ID = `SHA256(wxId + \0 + content + \0 + createTime)`, computed independently by client and server with identical results
 - **IP deduplication** — the same IP opening multiple times counts as 1 read, enforced at the storage level via a unique index
 - **Dashboard** — dark-themed, responsive UI with EN/中文 i18n, search, filtering, expandable read details, password change
-- **Leaderboards** — three boards on the dashboard (registration / reads / per-message reads), each switchable between daily and overall; counts are cumulative "ever occurred" data (messages registered, read receipts received, reads per message) unaffected by level-quota cleanup; top 10 only, wxids masked server-side (full account never reaches the frontend), your own row (or your messages) highlighted; the daily ranking uses the China timezone (UTC+8) day boundary
+- **Leaderboards** — three boards on the dashboard (registration / reads / per-message reads), each switchable between daily and overall; counts are cumulative "ever occurred" data (messages registered, read receipts received, reads per message) unaffected by level-quota cleanup; top 10 only, wxids masked server-side (full account never reaches the frontend), message contents on the per-message board are masked the same way (first and last 2 characters only; shown in full if under 5 characters), your own row (or your messages) highlighted; the daily ranking uses the China timezone (UTC+8) day boundary
 - **Serverless, zero cost** — runs on the Cloudflare Workers edge network; within the free tier: 100k requests/day, 5GB D1 reads/day
 
 ## Client Integration

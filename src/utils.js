@@ -158,3 +158,10 @@ export function maskWxId(wxId) {
   if (!/^wxid_/i.test(s)) return s;
   return s.slice(0, 7) + "***" + s.slice(-3);
 }
+
+// 消息内容脱敏：≥5 字时只保留前后各 2 字，中间用星号掩盖；不足 5 字全文显示
+export function maskContent(s) {
+  const str = String(s || "");
+  if (str.length < 5) return str;
+  return str.slice(0, 2) + "***" + str.slice(-2);
+}
