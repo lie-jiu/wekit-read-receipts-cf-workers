@@ -544,8 +544,8 @@ export function htmlPage(session) { return `<!doctype html>
             <button class="btn btn-sm scope-btn" id="metricMsg" onclick="setMetric('msg')" data-i18n="msgBoard">Messages</button>
           </div>
           <div class="flex">
-            <button class="btn btn-sm scope-btn scope-active" id="scopeDay" onclick="setScope('day')" data-i18n="daily">Daily</button>
-            <button class="btn btn-sm scope-btn" id="scopeTotal" onclick="setScope('total')" data-i18n="total">Total</button>
+            <button class="btn btn-sm scope-btn" id="scopeDay" onclick="setScope('day')" data-i18n="daily">Daily</button>
+            <button class="btn btn-sm scope-btn scope-active" id="scopeTotal" onclick="setScope('total')" data-i18n="total">Total</button>
           </div>
         </div>
         <table>
@@ -971,12 +971,18 @@ export function htmlPage(session) { return `<!doctype html>
         }
       }
 
+      function syncLbButtons() {
+        document.getElementById("metricReg").classList.toggle("scope-active", lbMetric === "reg");
+        document.getElementById("metricRead").classList.toggle("scope-active", lbMetric === "read");
+        document.getElementById("metricMsg").classList.toggle("scope-active", lbMetric === "msg");
+        document.getElementById("scopeDay").classList.toggle("scope-active", lbScope === "day");
+        document.getElementById("scopeTotal").classList.toggle("scope-active", lbScope === "total");
+      }
+
       function setMetric(m) {
         if (lbMetric === m) return;
         lbMetric = m;
-        document.getElementById("metricReg").classList.toggle("scope-active", m === "reg");
-        document.getElementById("metricRead").classList.toggle("scope-active", m === "read");
-        document.getElementById("metricMsg").classList.toggle("scope-active", m === "msg");
+        syncLbButtons();
         updateLbHeaders();
         loadLeaderboard();
       }
@@ -984,8 +990,7 @@ export function htmlPage(session) { return `<!doctype html>
       function setScope(s) {
         if (lbScope === s) return;
         lbScope = s;
-        document.getElementById("scopeDay").classList.toggle("scope-active", s === "day");
-        document.getElementById("scopeTotal").classList.toggle("scope-active", s === "total");
+        syncLbButtons();
         loadLeaderboard();
       }
 
@@ -1161,6 +1166,7 @@ export function htmlPage(session) { return `<!doctype html>
         ME.wxId + " · Lv" + ME.level;
       applyI18n();
       updateLbHeaders();
+      syncLbButtons();
       loadAll();
     </script>
   </body>
