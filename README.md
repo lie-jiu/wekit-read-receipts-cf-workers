@@ -43,6 +43,7 @@ sequenceDiagram
 - **确定性 ID** — 消息 ID = `SHA256(wxId + \0 + content + \0 + createTime)`，客户端与服务端独立计算结果一致
 - **IP 去重** — 同一 IP 多次打开只计 1 次已读，由存储层唯一索引强制执行
 - **仪表盘** — 深色主题、响应式界面，支持中英文 i18n、搜索、筛选、已读详情展开、修改密码
+- **注册消息排行榜** — 仪表盘展示注册消息数量排行榜，可切换日榜/总榜；仅显示前十，wxid 在服务端脱敏（完整账号不暴露到前端），本人上榜高亮；日榜按中国时区（UTC+8）自然日划分
 - **Serverless 零成本** — 运行于 Cloudflare Workers 边缘网络，免费额度内每天 10 万次请求、D1 每天 5GB 读取
 
 ## 客户端接入
@@ -98,6 +99,7 @@ sequenceDiagram
 | GET | `/messages/{wxId}?q=` | 按发送者列出消息（仅限本人） |
 | DELETE | `/messages/{wxId}` | 删除某发送者的全部消息（仅限本人，记录审计日志） |
 | GET | `/reads/{id}` | 本人某条消息的详细已读记录 |
+| GET | `/leaderboard?scope=day\|total` | 注册消息数排行榜（前十，wxid 脱敏，`me` 标记本人；日榜按中国时区） |
 | POST | `/auth/logout` | 销毁当前会话 |
 | POST | `/auth/password` | 修改自己的密码 |
 

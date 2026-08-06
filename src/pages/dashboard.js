@@ -226,6 +226,69 @@ export function htmlPage(session) { return `<!doctype html>
         background: #1a3050 !important;
       }
 
+      /* leaderboard */
+      .leaderboard {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+      }
+      .leaderboard-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        background: #0f172a;
+        border-bottom: 1px solid #334155;
+      }
+      .leaderboard-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #94a3b8;
+      }
+      .scope-btn {
+        background: transparent;
+        color: #94a3b8;
+        border: 1px solid #475569;
+      }
+      .scope-btn:hover {
+        background: #1e293b;
+        color: #e2e8f0;
+      }
+      .scope-btn.scope-active {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+      }
+      .rank-col {
+        font-weight: 600;
+        color: #94a3b8;
+        width: 3.5rem;
+      }
+      .rank-col.rank-1 {
+        color: #fbbf24;
+      }
+      .rank-col.rank-2 {
+        color: #cbd5e1;
+      }
+      .rank-col.rank-3 {
+        color: #d97706;
+      }
+      .wxid-col {
+        font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+        font-size: 0.78rem;
+      }
+      .lb-count-col {
+        color: #60a5fa;
+        font-weight: 600;
+      }
+      .row-me td {
+        background: #16324f !important;
+        color: #93c5fd;
+      }
+
       /* detail panel */
       .detail-panel {
         background: #1e293b;
@@ -467,6 +530,26 @@ export function htmlPage(session) { return `<!doctype html>
         />
       </div>
 
+      <div class="leaderboard">
+        <div class="leaderboard-header">
+          <span class="leaderboard-title" data-i18n="leaderboard">Leaderboard</span>
+          <div class="flex">
+            <button class="btn btn-sm scope-btn scope-active" id="scopeDay" onclick="setScope('day')" data-i18n="daily">Daily</button>
+            <button class="btn btn-sm scope-btn" id="scopeTotal" onclick="setScope('total')" data-i18n="total">Total</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="rank">Rank</th>
+              <th data-i18n="account">Account</th>
+              <th data-i18n="messageCount">Messages</th>
+            </tr>
+          </thead>
+          <tbody id="lbTbody"></tbody>
+        </table>
+      </div>
+
       <div class="table-wrapper">
         <div class="stats">
           <span
@@ -585,6 +668,13 @@ export function htmlPage(session) { return `<!doctype html>
           clearAllBody: "这将永久删除你账号下的所有消息及其读取记录。",
           loading: "加载中...",
           noRecords: "暂无消息",
+          leaderboard: "注册消息排行榜",
+          daily: "日榜",
+          total: "总榜",
+          rank: "排名",
+          account: "账号",
+          messageCount: "消息数",
+          leaderboardEmpty: "暂无数据",
           networkError: "网络错误",
           clearingAll: "正在清除我的记录…",
           clearedAll: "已清除我的所有记录",
@@ -624,6 +714,13 @@ export function htmlPage(session) { return `<!doctype html>
             "This will permanently delete all your messages and their reads.",
           loading: "Loading...",
           noRecords: "No messages found",
+          leaderboard: "Messages Leaderboard",
+          daily: "Daily",
+          total: "Overall",
+          rank: "Rank",
+          account: "Account",
+          messageCount: "Messages",
+          leaderboardEmpty: "No data yet",
           networkError: "Network error",
           clearingAll: "Clearing my records…",
           clearedAll: "All my records cleared",
@@ -766,6 +863,62 @@ export function htmlPage(session) { return `<!doctype html>
         const q = document.getElementById("msgFilter").value.trim();
         currentFilterUrl = "/messages" + (q ? "?q=" + encodeURIComponent(q) : "");
         await fetchData(currentFilterUrl);
+        loadLeaderboard();
+      }
+
+      /* ── leaderboard ── */
+      let lbScope = "total";
+      const lbTbody = document.getElementById("lbTbody");
+
+      async function loadLeaderboard() {
+        lbTbody.innerHTML =
+          '<tr class="empty-row"><td colspan="3">' +
+          esc(t("loading")) +
+          "</td></tr>";
+        try {
+          const res = await fetch("/leaderboard?scope=" + lbScope);
+          if (res.status === 401) {
+            location.href = "/";
+            return;
+          }
+          if (!res.ok) {
+            lbTbody.innerHTML =
+              '<tr class="empty-row"><td colspan="3">' +
+              esc(t("leaderboardEmpty")) +
+              "</td></tr>";
+            return;
+          }
+          const data = await res.json();
+          if (!data.length) {
+            lbTbody.innerHTML =
+              '<tr class="empty-row"><td colspan="3">' +
+              esc(t("leaderboardEmpty")) +
+              "</td></tr>";
+            return;
+          }
+          lbTbody.innerHTML = data
+            .map(
+              (r, i) => \`<tr class="\${r.me ? "row-me" : ""}">
+      <td class="rank-col rank-\${i < 3 ? i + 1 : "x"}">\${i + 1}</td>
+      <td class="wxid-col">\${esc(r.wxId)}</td>
+      <td class="lb-count-col">\${esc(r.count)}</td>
+    </tr>\`,
+            )
+            .join("");
+        } catch (e) {
+          lbTbody.innerHTML =
+            '<tr class="empty-row"><td colspan="3">' +
+            esc(t("networkError")) +
+            "</td></tr>";
+        }
+      }
+
+      function setScope(s) {
+        if (lbScope === s) return;
+        lbScope = s;
+        document.getElementById("scopeDay").classList.toggle("scope-active", s === "day");
+        document.getElementById("scopeTotal").classList.toggle("scope-active", s === "total");
+        loadLeaderboard();
       }
 
       async function fetchData(url) {
@@ -856,19 +1009,19 @@ export function htmlPage(session) { return `<!doctype html>
           .replace(/'/g, "&#39;");
       }
 
-      /* 服务端时间戳为 UTC "YYYY-MM-DD HH:MM:SS"，转换为本地时区同格式 */
+      /* 服务端时间戳为 UTC "YYYY-MM-DD HH:MM:SS"，统一转换为中国时区（UTC+8）显示 */
       function fmtTs(s) {
-        const m = /^(\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/.exec(
+        const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(
           String(s || "")
         );
         if (!m) return String(s || "");
         const d = new Date(
-          Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
+          Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) + 8 * 3600 * 1000
         );
         const p = (n) => String(n).padStart(2, "0");
-        return \`\${d.getFullYear()}-\${p(d.getMonth() + 1)}-\${p(d.getDate())} \${p(
-          d.getHours()
-        )}:\${p(d.getMinutes())}:\${p(d.getSeconds())}\`;
+        return \`\${d.getUTCFullYear()}-\${p(d.getUTCMonth() + 1)}-\${p(d.getUTCDate())} \${p(
+          d.getUTCHours()
+        )}:\${p(d.getUTCMinutes())}:\${p(d.getUTCSeconds())}\`;
       }
 
       /* ── detail panel ── */

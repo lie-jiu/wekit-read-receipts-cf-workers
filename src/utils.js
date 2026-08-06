@@ -137,3 +137,19 @@ export async function audit(db, action, detail) {
       .run();
   } catch {}
 }
+
+// 中国时区（UTC+8）当日 0 点对应的 UTC 时间戳，格式与 timestamp 列一致（YYYY-MM-DD HH:MM:SS），可直接比较
+export function chinaDayStartTimestamp() {
+  const nowCn = new Date(Date.now() + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  const ms = Date.UTC(nowCn.getUTCFullYear(), nowCn.getUTCMonth(), nowCn.getUTCDate()) - 8 * 3600 * 1000;
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
+// 用户名脱敏：wxid 开头保留 "wxid_" + 前 1 位 + 后 3 位，中间用星号掩盖（仅服务端调用，避免完整 wxid 暴露到前端）
+export function maskWxId(wxId) {
+  const s = String(wxId || "");
+  if (!/^wxid_/i.test(s)) return s;
+  return s.slice(0, 7) + "***" + s.slice(-3);
+}

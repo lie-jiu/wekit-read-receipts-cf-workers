@@ -43,6 +43,7 @@ sequenceDiagram
 - **Deterministic IDs** — Message ID = `SHA256(wxId + \0 + content + \0 + createTime)`, computed independently by client and server with identical results
 - **IP deduplication** — the same IP opening multiple times counts as 1 read, enforced at the storage level via a unique index
 - **Dashboard** — dark-themed, responsive UI with EN/中文 i18n, search, filtering, expandable read details, password change
+- **Messages leaderboard** — shows a leaderboard of registered-message counts on the dashboard, switchable between daily and overall; top 10 only, wxids masked server-side (full account never reaches the frontend), your own row highlighted; the daily ranking is based on the China timezone (UTC+8) day boundary
 - **Serverless, zero cost** — runs on the Cloudflare Workers edge network; within the free tier: 100k requests/day, 5GB D1 reads/day
 
 ## Client Integration
@@ -98,6 +99,7 @@ New users are **level 1**. Level N means: keep up to **N messages**, each for up
 | GET | `/messages/{wxId}?q=` | List messages by sender (own only) |
 | DELETE | `/messages/{wxId}` | Delete all messages from a sender (own only, audited) |
 | GET | `/reads/{id}` | Get detailed read records for an own message |
+| GET | `/leaderboard?scope=day\|total` | Leaderboard of registered-message counts (top 10, wxids masked, `me` flag marks yourself; daily scope uses the China timezone) |
 | POST | `/auth/logout` | Destroy current session |
 | POST | `/auth/password` | Change own password |
 

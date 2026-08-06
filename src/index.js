@@ -15,6 +15,8 @@ import {
   computeId,
   escapeLike,
   audit,
+  chinaDayStartTimestamp,
+  maskWxId,
 } from "./utils.js";
 import {
   extractSession,
@@ -326,6 +328,31 @@ async function handleRequest(request, env) {
     await audit(env.DB, "password_change", session.wxId);
     await revokeOtherSessions(request, env.DB, session.wxId);
     return json({ ok: true });
+  }
+
+  // GET /leaderboard：注册消息数排行榜（日榜/总榜，仅前十，wxid 服务端脱敏，me 标记本人行）
+  if (path === "/leaderboard" && request.method === "GET") {
+    const scope = params.get("scope") || "total";
+    if (scope !== "day" && scope !== "total") {
+      return json({ error: "Invalid scope: must be day or total" }, 400);
+    }
+    let query = "SELECT wx_id, COUNT(*) AS cnt FROM messages";
+    const bind = [];
+    if (scope === "day") {
+      // 日榜按中国时区（UTC+8）自然日划分
+      query += " WHERE timestamp >= ?";
+      bind.push(chinaDayStartTimestamp());
+    }
+    query += " GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10";
+    const result = await env.DB.prepare(query).bind(...bind).all();
+    const rows = result.results || [];
+    return json(
+      rows.map((r) => ({
+        wxId: maskWxId(r.wx_id),
+        count: r.cnt,
+        me: r.wx_id === session.wxId,
+      }))
+    );
   }
 
   // ── 管理员端点 ──
