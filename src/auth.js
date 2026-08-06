@@ -79,7 +79,7 @@ export async function destroySession(request, db) {
   }
 }
 
-// ── 等级配额：仅在被注册新消息时惰性清理 ────────────────
+// ── 等级配额：惰性清理（注册新消息 / 查看消息时触发）────
 // 等级 N = 保留 N 条消息 × N 个月；超量时删除最早的消息，过期时删除整批
 export async function enforceQuota(db, wxId, level) {
   const n = Math.max(0, Math.min(Number(level) || 0, LEVEL_MAX));

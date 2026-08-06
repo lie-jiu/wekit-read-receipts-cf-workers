@@ -224,6 +224,11 @@ async function handleRequest(request, env) {
     const wxId = params.get("wxId") || "";
     const id = params.get("id") || "";
     if (!wxId || !id) return json({ error: "Missing wxId or id" }, 400);
+    // 查看即惰性清理（等级配额 / 过期消息）
+    const user = await env.DB.prepare("SELECT level FROM users WHERE wx_id = ?").bind(wxId).first();
+    if (user) {
+      await enforceQuota(env.DB, wxId, user.level);
+    }
     const msg = await env.DB.prepare("SELECT 1 FROM messages WHERE id = ? AND wx_id = ?")
       .bind(id, wxId)
       .first();
@@ -436,6 +441,7 @@ async function handleRequest(request, env) {
 
   // GET/DELETE /messages：本人全部消息
   if (path === "/messages" && request.method === "GET") {
+    await enforceQuota(env.DB, session.wxId, session.level);
     const q = (params.get("q") || "").slice(0, 200);
     let query = `SELECT m.id, m.wx_id AS wxId, m.content, m.timestamp, COUNT(DISTINCT r.ip) AS reads
       FROM messages m LEFT JOIN reads r ON m.id = r.id
@@ -475,6 +481,7 @@ async function handleRequest(request, env) {
       await audit(env.DB, "delete_wxid", wxId);
       return json({ status: "ok" });
     }
+    await enforceQuota(env.DB, wxId, session.level);
     const q = (params.get("q") || "").slice(0, 200);
     let query = `SELECT m.id, m.wx_id AS wxId, m.content, m.timestamp, COUNT(DISTINCT r.ip) AS reads
       FROM messages m LEFT JOIN reads r ON m.id = r.id
@@ -502,6 +509,7 @@ async function handleRequest(request, env) {
     if (!msg || msg.wx_id !== session.wxId) {
       return json({ error: "Not Found" }, 404);
     }
+    await enforceQuota(env.DB, session.wxId, session.level);
     const result = await env.DB.prepare(
       "SELECT ip, timestamp FROM reads WHERE id = ? ORDER BY timestamp DESC"
     )

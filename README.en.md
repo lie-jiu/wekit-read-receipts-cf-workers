@@ -73,7 +73,7 @@ This service is also called by the WeKit client module (third-party, not modifia
 Please be aware:
 
 - **The invite code only gates account registration** (`/auth/register`), not message registration. Anyone who knows a user's wxId can register messages on their behalf
-- The level quota uses lazy cleanup that **deletes the oldest messages when over quota**: registering N+1 messages against a wxId triggers deletion of all its messages (N ≤ 99). Use this only within a trusted circle, and use `ADMIN` to manage accounts
+- The level quota uses lazy cleanup that **deletes the oldest messages when over quota**, triggered when registering a new message or viewing messages/counts: registering N+1 messages against a wxId triggers deletion of all its messages (N ≤ 99). Use this only within a trusted circle, and use `ADMIN` to manage accounts
 - The server receives message plaintext (needed to match read records) — this is inherent to the design
 
 ## Authentication
@@ -87,7 +87,7 @@ The server uses a **multi-user wxId + password** system, with short-lived sessio
 
 ### Level Quotas
 
-New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months** (max 99). When registering a new message, the oldest message beyond the quota is auto-deleted, and messages older than N months are purged (both lazily, only at registration time). **Level 0 = blocked**: cannot register messages, and setting a user to level 0 immediately wipes all their messages and reads (the account is kept and can be re-promoted at any time). Admins can adjust levels (0–99) in the backend.
+New users are **level 1**. Level N means: keep up to **N messages**, each for up to **N months** (max 99). When registering a new message or viewing messages, the oldest message beyond the quota is auto-deleted, and messages older than N months are purged (lazy cleanup). **Level 0 = blocked**: cannot register messages, and setting a user to level 0 immediately wipes all their messages and reads (the account is kept and can be re-promoted at any time). Admins can adjust levels (0–99) in the backend.
 
 ### Environment Variables
 
