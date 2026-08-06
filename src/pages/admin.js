@@ -6,7 +6,7 @@ export function adminPage(session) { return `<!doctype html>
 <title data-i18n="title">Admin — Read Receipts</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;padding:2rem 1rem}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;min-height:100dvh;padding:2rem 1rem;padding-top:max(2rem,env(safe-area-inset-top));padding-bottom:max(2rem,env(safe-area-inset-bottom));padding-left:max(1rem,env(safe-area-inset-left));padding-right:max(1rem,env(safe-area-inset-right))}
 .container{max-width:1000px;margin:0 auto}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem}
 .header h1{font-size:1.5rem;font-weight:700;color:#f1f5f9}
@@ -47,7 +47,7 @@ tr:hover td{background:#0f172a80}
 .level-input{width:3.2rem;text-align:center;padding:.25rem .3rem;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.8rem;outline:none;-moz-appearance:textfield}
 .level-input::-webkit-outer-spin-button,.level-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .level-input:focus{border-color:#3b82f6}
-.toast-container{position:fixed;top:1rem;right:1rem;z-index:1000;display:flex;flex-direction:column;gap:.5rem}
+.toast-container{position:fixed;top:max(1rem,env(safe-area-inset-top));right:max(1rem,env(safe-area-inset-right));z-index:1000;display:flex;flex-direction:column;gap:.5rem}
 .toast{display:flex;align-items:center;gap:.5rem;padding:.65rem 1rem;border-radius:8px;font-size:.85rem;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);animation:toast-in .25s ease-out;max-width:360px}
 .toast-success{background:#065f46;color:#a7f3d0;border:1px solid #059669}
 .toast-error{background:#7f1d1d;color:#fecaca;border:1px solid #dc2626}
@@ -64,7 +64,7 @@ tr:hover td{background:#0f172a80}
 .modal-form input{width:100%;padding:.55rem .7rem;border:1px solid #475569;border-radius:6px;font-size:.9rem;background:#0f172a;color:#e2e8f0;outline:none;margin-bottom:.6rem;transition:border-color .15s}
 .modal-form input:focus{border-color:#3b82f6}
 .hidden{display:none !important}
-@media (max-width:640px){body{padding:1rem .5rem}.controls{flex-direction:column;align-items:stretch}.controls input{min-width:0;width:100%}}
+@media (max-width:640px){body{padding:1rem .75rem}.header{flex-direction:column;align-items:stretch}.header .flex{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.header .btn,.header .lang-toggle{width:100%;justify-content:center;min-height:40px}.tabs{display:grid;grid-template-columns:1fr 1fr}.tab{min-height:42px}.controls{flex-direction:column;align-items:stretch}.controls input{min-width:0;width:100%;min-height:44px}.btn{min-height:40px}.table-wrapper{padding:.5rem}table{display:block}thead{display:none}tbody{display:block}tbody tr{display:block;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:.25rem 0;margin-bottom:.6rem}tbody tr:hover td,tbody tr:last-child td{background:transparent}tbody tr td{display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-bottom:1px solid #1e293b;padding:.5rem .75rem;font-size:.8rem}tbody tr td:last-child{border-bottom:none}tbody tr td::before{content:attr(data-label);color:#64748b;font-weight:600;font-size:.72rem;flex-shrink:0}tbody tr td .flex{flex-wrap:nowrap}.uuid-col,.ts-col{white-space:normal;overflow-wrap:anywhere;text-align:right}.msg-col{max-width:none;white-space:normal;text-align:right;overflow-wrap:anywhere}.empty-row{border:1px dashed #334155;background:transparent !important}.empty-row td{justify-content:center;text-align:center;color:#64748b}.empty-row td::before{display:none}.level-input{font-size:1rem}.modal{max-width:94vw;width:94vw;padding:1.25rem}.modal .actions{flex-direction:column-reverse}.modal .actions .btn{width:100%;justify-content:center;min-height:44px}.modal-form input{min-height:44px}.toast-container{left:1rem;align-items:stretch}.toast{max-width:100%}}
 </style>
 </head>
 <body>
@@ -285,6 +285,18 @@ function toggleLang() {
   if ($("tabUsers").classList.contains("active")) loadUsers();
   else loadMsgs();
 }
+/* 移动端卡片布局的列标签（跟随当前语言） */
+function setLabels() {
+  const apply = (tbodyEl, labels) => {
+    tbodyEl.querySelectorAll("tr:not(.empty-row)").forEach((tr) => {
+      Array.from(tr.cells).forEach((td, i) => {
+        if (labels[i]) td.setAttribute("data-label", labels[i]);
+      });
+    });
+  };
+  apply($("userTbody"), ["wxId", t("level"), t("registered"), t("actions")]);
+  apply($("msgTbody"), ["wxId", t("message"), t("reads"), t("timestamp"), t("actions")]);
+}
 applyI18n();
 const toastContainer = $("toastContainer");
 const modalOverlay = $("modalOverlay"), modalTitle = $("modalTitle"), modalBody = $("modalBody"), modalCancel = $("modalCancel"), modalConfirm = $("modalConfirm");
@@ -357,6 +369,7 @@ async function loadUsers() {
       })
       .join("");
   } catch (e) { toast(t("networkError") + ": " + e.message, "error"); }
+  setLabels();
 }
 async function saveLevel(wxId, level) {
   try {
@@ -460,6 +473,7 @@ async function loadMsgs() {
           .join("")
       : '<tr class="empty-row"><td colspan="5">' + t("noMessages") + "</td></tr>";
   } catch (e) { toast(t("networkError"), "error"); }
+  setLabels();
 }
 function askDeleteMsg(id) {
   showModal(t("delMsgTitle"), t("delMsgBody"), () => doDeleteMsg(id));

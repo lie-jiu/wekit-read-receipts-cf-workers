@@ -7,8 +7,8 @@ export const LOGIN_HTML = `<!doctype html>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9C%89%EF%B8%8F%3C/text%3E%3C/svg%3E" />
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem;max-width:380px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1rem;padding-top:max(1rem,env(safe-area-inset-top));padding-bottom:max(1rem,env(safe-area-inset-bottom));padding-left:max(1rem,env(safe-area-inset-left));padding-right:max(1rem,env(safe-area-inset-right))}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem;max-width:min(380px,100%);width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5)}
 h1{font-size:1.25rem;font-weight:700;margin-bottom:.5rem}
 p{font-size:.85rem;color:#94a3b8;margin-bottom:1.25rem}
 .tabs{display:flex;gap:.4rem;margin-bottom:1.25rem}
@@ -22,8 +22,9 @@ button[type=submit]:disabled{opacity:.6;cursor:not-allowed}
 .msg{margin-top:.9rem;font-size:.8rem;color:#fca5a5;min-height:1.2em;text-align:center}
 .hint{font-size:.72rem;color:#64748b;margin:-.2rem 0 .6rem}
 .hidden{display:none}
-.lang-toggle{position:fixed;top:1rem;right:1rem;font-size:.7rem;font-weight:600;padding:.25rem .5rem;border-radius:4px;background:transparent;color:#64748b;border:1px solid #475569;cursor:pointer;letter-spacing:.03em}
+.lang-toggle{position:fixed;top:max(1rem,env(safe-area-inset-top));right:max(1rem,env(safe-area-inset-right));font-size:.7rem;font-weight:600;padding:.25rem .5rem;border-radius:4px;background:transparent;color:#64748b;border:1px solid #475569;cursor:pointer;letter-spacing:.03em}
 .lang-toggle:hover{color:#e2e8f0;border-color:#94a3b8}
+@media (max-width:480px){.card{padding:1.5rem 1.25rem}.tab,button[type=submit],input{min-height:44px}.lang-toggle{padding:.5rem .6rem}}
 </style>
 </head>
 <body>
