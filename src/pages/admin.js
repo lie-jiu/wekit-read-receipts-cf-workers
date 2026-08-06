@@ -86,6 +86,9 @@ tr:hover td{background:#0f172a80}
   </div>
 
   <div id="secUsers">
+    <div class="controls">
+      <button class="btn btn-primary" onclick="openAddUser()" data-i18n="addUser">Add User</button>
+    </div>
     <div class="table-wrapper">
       <div class="stats"><span><span class="count" id="userCount">0</span> <span data-i18n="usersLabel">users</span></span></div>
       <table>
@@ -136,6 +139,19 @@ tr:hover td{background:#0f172a80}
     </div>
   </div>
 </div>
+<div id="addUserOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 data-i18n="addUserTitle">Add User</h3>
+    <div class="modal-form">
+      <input id="newUserWxid" placeholder="wxId" data-i18n="addUserWxidPlaceholder" data-i18n-placeholder/>
+      <input type="password" id="newUserPw" placeholder="Password (min 8 chars)" data-i18n="newPassPlaceholder" data-i18n-placeholder/>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary" id="addUserCancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-primary" id="addUserSave" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const ME = ${JSON.stringify({ wxId: session.wxId })};
@@ -148,6 +164,12 @@ const translations = {
     logout: "退出登录",
     tabUsers: "用户",
     tabMsgs: "消息",
+    addUser: "新增用户",
+    addUserTitle: "新增用户",
+    addUserWxidPlaceholder: "wxId",
+    addUserOk: "已创建用户 {0}",
+    addUserFail: "创建用户失败",
+    addUserEmptyWxid: "请填写 wxId",
     usersLabel: "个用户",
     messagesLabel: "条消息",
     level: "等级",
@@ -195,6 +217,12 @@ const translations = {
     logout: "Logout",
     tabUsers: "Users",
     tabMsgs: "Messages",
+    addUser: "Add User",
+    addUserTitle: "Add User",
+    addUserWxidPlaceholder: "wxId",
+    addUserOk: 'User "{0}" created',
+    addUserFail: "Failed to create user",
+    addUserEmptyWxid: "Enter a wxId",
     usersLabel: "users",
     messagesLabel: "messages",
     level: "Level",
@@ -261,6 +289,7 @@ applyI18n();
 const toastContainer = $("toastContainer");
 const modalOverlay = $("modalOverlay"), modalTitle = $("modalTitle"), modalBody = $("modalBody"), modalCancel = $("modalCancel"), modalConfirm = $("modalConfirm");
 const passOverlay = $("passOverlay"), newUserPass = $("newUserPass"), passCancel = $("passCancel"), passSave = $("passSave");
+const addUserOverlay = $("addUserOverlay"), newUserWxid = $("newUserWxid"), newUserPw = $("newUserPw"), addUserCancel = $("addUserCancel"), addUserSave = $("addUserSave");
 let targetWxId = "";
 
 $("adminName").textContent = ME.wxId;
@@ -347,6 +376,33 @@ function openSetPass(wxId) {
   passOverlay.classList.remove("hidden");
   newUserPass.focus();
 }
+function openAddUser() {
+  newUserWxid.value = "";
+  newUserPw.value = "";
+  addUserOverlay.classList.remove("hidden");
+  newUserWxid.focus();
+}
+function closeAddUser() { addUserOverlay.classList.add("hidden"); }
+addUserCancel.onclick = closeAddUser;
+addUserOverlay.onclick = (e) => { if (e.target === addUserOverlay) closeAddUser(); };
+addUserSave.onclick = async () => {
+  const wxId = newUserWxid.value.trim();
+  const password = newUserPw.value;
+  if (!wxId) { toast(t("addUserEmptyWxid"), "error"); return; }
+  if (password.length < 8) { toast(t("passTooShort"), "error"); return; }
+  try {
+    const res = await fetch("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wxId, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || t("addUserFail"), "error"); return; }
+    toast(t("addUserOk", wxId), "success");
+    closeAddUser();
+    loadUsers();
+  } catch (e) { toast(t("networkError"), "error"); }
+};
 function closePass() { passOverlay.classList.add("hidden"); }
 passCancel.onclick = closePass;
 passOverlay.onclick = (e) => { if (e.target === passOverlay) closePass(); };

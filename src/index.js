@@ -420,6 +420,36 @@ async function handleRequest(request, env) {
       return json(result.results || []);
     }
 
+    // POST /admin/users：管理员创建新用户（不校验 wxId 格式，仅要求不重复）
+    if (path === "/admin/users" && request.method === "POST") {
+      const body = await request.json();
+      const wxId = String(body.wxId || "").trim();
+      const password = String(body.password || "");
+      if (!wxId || wxId.length > 64) {
+        return json({ error: "Invalid wxId (non-empty, ≤64 chars)" }, 400);
+      }
+      if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX || password === wxId) {
+        return json(
+          { error: `Password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters and different from wxId` },
+          400
+        );
+      }
+      const existing = await env.DB.prepare("SELECT 1 FROM users WHERE wx_id = ?").bind(wxId).first();
+      if (existing) {
+        return json({ error: "This wxId already exists" }, 409);
+      }
+      const stored = await hashPassword(password);
+      const res = await env.DB
+        .prepare("INSERT INTO users (wx_id, password_hash, level, created_at) VALUES (?, ?, 1, ?)")
+        .bind(wxId, stored, nowTimestamp())
+        .run();
+      if (!res?.success) {
+        return json({ error: "Failed to create user" }, 500);
+      }
+      await audit(env.DB, "admin_create_user", wxId);
+      return json({ ok: true });
+    }
+
     // POST /admin/level：调整用户等级
     if (path === "/admin/level" && request.method === "POST") {
       const body = await request.json();
