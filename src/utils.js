@@ -138,6 +138,11 @@ export async function audit(db, action, detail) {
   } catch {}
 }
 
+// 中国时区（UTC+8）当日日期 YYYY-MM-DD（日榜按中国自然日划分）
+export function chinaDate() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 // 中国时区（UTC+8）当日 0 点对应的 UTC 时间戳，格式与 timestamp 列一致（YYYY-MM-DD HH:MM:SS），可直接比较
 export function chinaDayStartTimestamp() {
   const nowCn = new Date(Date.now() + 8 * 3600 * 1000);

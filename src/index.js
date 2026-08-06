@@ -16,6 +16,7 @@ import {
   escapeLike,
   audit,
   chinaDayStartTimestamp,
+  chinaDate,
   maskWxId,
 } from "./utils.js";
 import {
@@ -257,6 +258,17 @@ async function handleRequest(request, env) {
     // 仅新插入时执行等级配额清理（重复注册同一消息不触发，避免误删数据）
     if (res?.meta?.changes > 0) {
       await enforceQuota(env.DB, wxId, user.level);
+      // 排行榜按「注册过多少条消息」累计统计（只增不减，不受配额清理影响）；
+      // 失败不影响注册主流程
+      try {
+        await env.DB
+          .prepare(
+            "INSERT INTO registration_stats (wx_id, date, count) VALUES (?, ?, 1) " +
+              "ON CONFLICT (wx_id, date) DO UPDATE SET count = count + 1"
+          )
+          .bind(wxId, chinaDate())
+          .run();
+      } catch {}
     }
     return json({ id });
   }
@@ -336,16 +348,48 @@ async function handleRequest(request, env) {
     if (scope !== "day" && scope !== "total") {
       return json({ error: "Invalid scope: must be day or total" }, 400);
     }
-    let query = "SELECT wx_id, COUNT(*) AS cnt FROM messages";
-    const bind = [];
-    if (scope === "day") {
-      // 日榜按中国时区（UTC+8）自然日划分
-      query += " WHERE timestamp >= ?";
-      bind.push(chinaDayStartTimestamp());
+    let rows = [];
+    try {
+      if (scope === "day") {
+        // 日榜按中国时区（UTC+8）自然日划分
+        const result = await env.DB
+          .prepare(
+            "SELECT wx_id, count AS cnt FROM registration_stats WHERE date = ? " +
+              "ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+          )
+          .bind(chinaDate())
+          .all();
+        rows = result.results || [];
+      } else {
+        const result = await env.DB
+          .prepare(
+            "SELECT wx_id, SUM(count) AS cnt FROM registration_stats " +
+              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+          )
+          .all();
+        rows = result.results || [];
+      }
+    } catch {
+      // registration_stats 表尚未创建（未重跑 schema.sql）：回退到当前 messages 表统计
+      if (scope === "day") {
+        const result = await env.DB
+          .prepare(
+            "SELECT wx_id, COUNT(*) AS cnt FROM messages WHERE timestamp >= ? " +
+              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+          )
+          .bind(chinaDayStartTimestamp())
+          .all();
+        rows = result.results || [];
+      } else {
+        const result = await env.DB
+          .prepare(
+            "SELECT wx_id, COUNT(*) AS cnt FROM messages " +
+              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+          )
+          .all();
+        rows = result.results || [];
+      }
     }
-    query += " GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10";
-    const result = await env.DB.prepare(query).bind(...bind).all();
-    const rows = result.results || [];
     return json(
       rows.map((r) => ({
         wxId: maskWxId(r.wx_id),
@@ -390,10 +434,13 @@ async function handleRequest(request, env) {
       if (!res?.success || (res.meta?.changes ?? 0) === 0) {
         return json({ error: "User not found" }, 404);
       }
-      // 等级 0 = 拉黑：立即清空其全部消息与已读记录（账号保留）
+      // 等级 0 = 拉黑：立即清空其全部消息、已读记录与排行统计（账号保留）
       if (level === 0) {
         await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?").bind(wxId).run();
         await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
+        try {
+          await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+        } catch {}
       }
       await audit(env.DB, "set_level", level === 0 ? `${wxId} -> 0 (data wiped)` : `${wxId} -> ${level}`);
       return json({ ok: true });
@@ -441,6 +488,9 @@ async function handleRequest(request, env) {
       }
       await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?").bind(wxId).run();
       await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
+      try {
+        await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+      } catch {}
       await env.DB.prepare("DELETE FROM sessions WHERE wx_id = ?").bind(wxId).run();
       await env.DB.prepare("DELETE FROM users WHERE wx_id = ?").bind(wxId).run();
       await audit(env.DB, "user_delete", wxId);
@@ -468,6 +518,9 @@ async function handleRequest(request, env) {
       if (!wxId) return json({ error: "Missing wxId param" }, 400);
       await env.DB.prepare("DELETE FROM reads WHERE wx_id = ?").bind(wxId).run();
       await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
+      try {
+        await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+      } catch {}
       await audit(env.DB, "admin_delete_wxid", wxId);
       return json({ ok: true });
     }
