@@ -57,7 +57,7 @@ sequenceDiagram
 
 请知悉：
 
-- **邀请码只限制账号注册**（`/auth/register`），不参与消息注册。任何知道某用户 wxid 的人都能冒充该账号注册消息
+- **邀请码只限制账号注册**（`/auth/register`），不参与消息注册。任何知道某用户 wxid 的人都能冒充该账号注册消息（受每 IP 每分钟 30 次的限流约束）
 - 等级配额采用「超额删除最旧消息」的惰性清理：注册新消息或查看消息/已读次数时触发，向某 wxid 连续注册 N+1 条消息即可触发其全部消息被清除（N ≤ 99）。请仅在受信任的小圈子中使用，并善用 `ADMIN` 管理账号
 - 服务端会收到消息明文（用于匹配已读记录），这是该方案的本质
 
@@ -66,7 +66,7 @@ sequenceDiagram
 - **注册**：首次使用访问登录页 → 切换到「注册」→ 填写 wxid + 密码（≥8 位）+ 邀请码 → 自动登录
 - **登录**：wxid + 密码 → POST 到 `/auth/verify` → 设置 `__Host-session` cookie（HttpOnly、Secure、SameSite=Lax，30 天）→ 重定向到 `/`。管理员需手动访问 `/admin` 进入后台
 - **会话**：服务端只存储会话 ID 的 SHA-256 哈希，cookie 本身从不包含密码
-- **数据隔离**：所有 `/messages*`、`/reads/*`、`/count`、`/register` 端点强制限定为当前登录账号的 wxid
+- **数据隔离**：所有 `/messages*`、`/reads/*` 端点强制限定为当前登录账号的 wxid；`/count`、`/register` 为公开端点，通过请求中的 wxId 参数指定账号（见[客户端接入](#客户端接入)）
 
 ### 等级配额
 
@@ -160,6 +160,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 
 - 创建 `users`、`sessions` 和 `audit_logs` 表
 - 对现有 `reads` 行去重，并添加 `(id, ip)` 唯一索引
+- 添加 `reads(wx_id, timestamp)` 索引，避免 `/count` 轮询时的全表扫描
 - （已重复打开过消息的现有读者只保留第一条记录）
 
 > [!NOTE]
@@ -172,7 +173,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 
 ## 安全设计
 
-- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/auth/verify`、`/auth/register`、`/auth/password`：每 IP 每分钟 5 次（fail-closed）
+- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/register`（消息）：每 IP 每分钟 30 次（fail-open，不影响客户端）；`/auth/verify`、`/auth/register`、`/auth/password`：每 IP 每分钟 5 次（fail-closed）
 - **密码哈希** — PBKDF2-SHA256，每用户随机 salt，10 万次迭代（Web Crypto，Workers 原生支持）
 - **已注册消息校验** — `/pixel` 忽略未注册消息的读取（阻止灌库攻击）
 - **存储级去重** — `reads(id, ip)` 唯一索引 + `INSERT OR IGNORE`

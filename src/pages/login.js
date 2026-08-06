@@ -41,7 +41,7 @@ button[type=submit]:disabled{opacity:.6;cursor:not-allowed}
   <button type="submit" id="loginBtn" data-i18n="unlock">Unlock</button>
 </form>
 <form id="registerForm" class="hidden" autocomplete="on">
-  <input id="regWxid" placeholder="wxId (3-64 letters / digits / _ -)" autocomplete="username" data-i18n="phRegWxid" data-i18n-placeholder/>
+  <input id="regWxid" placeholder="wxId (wxid_ + 14 lowercase letters/digits)" autocomplete="username" data-i18n="phRegWxid" data-i18n-placeholder/>
   <input id="regPass" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" data-i18n="phRegPass" data-i18n-placeholder/>
   <input id="regPass2" type="password" placeholder="Confirm password" autocomplete="new-password" data-i18n="phRegPass2" data-i18n-placeholder/>
   <div id="inviteWrap" class="hidden"><input id="regInvite" placeholder="Invite code" data-i18n="phInvite" data-i18n-placeholder/></div>
@@ -62,7 +62,7 @@ const translations = {
     phWxid: "wxId",
     phPassword: "密码",
     unlock: "解锁",
-    phRegWxid: "wxId（3-64 位字母/数字/_ -）",
+    phRegWxid: "wxId（wxid_ + 14 位小写字母/数字）",
     phRegPass: "密码（至少 8 位）",
     phRegPass2: "确认密码",
     phInvite: "邀请码",
@@ -81,7 +81,7 @@ const translations = {
     phWxid: "wxId",
     phPassword: "Password",
     unlock: "Unlock",
-    phRegWxid: "wxId (3-64 letters / digits / _ -)",
+    phRegWxid: "wxId (wxid_ + 14 lowercase letters/digits)",
     phRegPass: "Password (min 8 chars)",
     phRegPass2: "Confirm password",
     phInvite: "Invite code",

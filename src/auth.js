@@ -79,6 +79,33 @@ export async function destroySession(request, db) {
   }
 }
 
+// 吊销某用户除当前请求外的全部会话（修改密码后调用，保证旧会话立即失效）
+export async function revokeOtherSessions(request, db, wxId) {
+  const cookieHeader = request.headers.get("Cookie");
+  let currentHash = null;
+  if (cookieHeader) {
+    for (const pair of cookieHeader.split(";")) {
+      const trimmed = pair.trim();
+      if (trimmed.startsWith("__Host-session=")) {
+        const value = trimmed.slice("__Host-session=".length);
+        if (value.startsWith("sess_")) {
+          currentHash = await sha256Hex(value.slice(5));
+        }
+      }
+    }
+  }
+  try {
+    if (currentHash) {
+      await db
+        .prepare("DELETE FROM sessions WHERE wx_id = ? AND token_hash != ?")
+        .bind(wxId, currentHash)
+        .run();
+    } else {
+      await db.prepare("DELETE FROM sessions WHERE wx_id = ?").bind(wxId).run();
+    }
+  } catch {}
+}
+
 // ── 等级配额：惰性清理（注册新消息 / 查看消息时触发）────
 // 等级 N = 保留 N 条消息 × N 个月；超量时删除最早的消息，过期时删除整批
 export async function enforceQuota(db, wxId, level) {

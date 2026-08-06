@@ -57,7 +57,7 @@ This service is also called by the WeKit client module (third-party, not modifia
 
 Please be aware:
 
-- **The invite code only gates account registration** (`/auth/register`), not message registration. Anyone who knows a user's wxid can register messages on their behalf
+- **The invite code only gates account registration** (`/auth/register`), not message registration. Anyone who knows a user's wxid can register messages on their behalf (throttled to 30 req/min per IP)
 - The level quota uses lazy cleanup that **deletes the oldest messages when over quota**, triggered when registering a new message or viewing messages/counts: registering N+1 messages against a wxid triggers deletion of all its messages (N ≤ 99). Use this only within a trusted circle, and use `ADMIN` to manage accounts
 - The server receives message plaintext (needed to match read records) — this is inherent to the design
 
@@ -66,7 +66,7 @@ Please be aware:
 - **Registration**: visit the login page → switch to "Register" → enter wxid + password (≥8 chars) + invite code → auto-login
 - **Login**: wxid + password → POST to `/auth/verify` → sets an `__Host-session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days) → redirects to `/`. Admins must manually visit `/admin` to access the backend
 - **Sessions**: the server stores only a SHA-256 hash of a random session ID; the cookie never contains the password
-- **Data isolation**: all `/messages*`, `/reads/*`, `/count`, `/register` endpoints are scoped to the currently logged-in account's wxid
+- **Data isolation**: all `/messages*`, `/reads/*` endpoints are scoped to the currently logged-in account's wxid; `/count` and `/register` are public endpoints that address the account via the `wxId` parameter (see [Client Integration](#client-integration))
 
 ### Level Quotas
 
@@ -160,6 +160,7 @@ Re-run `schema.sql` once. It is idempotent and will:
 
 - create the `users`, `sessions`, and `audit_logs` tables
 - deduplicate existing `reads` rows and add the unique `(id, ip)` index
+- add the `reads(wx_id, timestamp)` index to avoid full-table scans on `/count` polling
 - (existing readers who already re-opened a message keep their first record only)
 
 > [!NOTE]
@@ -172,7 +173,7 @@ Re-run `schema.sql` once. It is idempotent and will:
 
 ## Security Design
 
-- **Rate limiting** — `/pixel`: 10 req/min per IP; `/auth/verify`, `/auth/register`, `/auth/password`: 5 req/min per IP (fail-closed)
+- **Rate limiting** — `/pixel`: 10 req/min per IP; `/register` (messages): 30 req/min per IP (fail-open, does not break the client); `/auth/verify`, `/auth/register`, `/auth/password`: 5 req/min per IP (fail-closed)
 - **Password hashing** — PBKDF2-SHA256, per-user random salt, 100k iterations (Web Crypto, natively available in Workers)
 - **Registered-message check** — `/pixel` ignores reads for unregistered messages (blocks DB-filling attacks)
 - **Storage-level dedup** — unique index on `reads(id, ip)` + `INSERT OR IGNORE`

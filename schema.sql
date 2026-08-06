@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reads_id_wxid ON reads (id, wx_id);
+CREATE INDEX IF NOT EXISTS idx_reads_wx_ts ON reads (wx_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_wx_id ON messages (wx_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
 CREATE INDEX IF NOT EXISTS idx_users_level ON users (level);

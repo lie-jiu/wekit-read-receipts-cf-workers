@@ -21,6 +21,7 @@ import {
   isAdminUser,
   createSessionCookie,
   destroySession,
+  revokeOtherSessions,
   enforceQuota,
 } from "./auth.js";
 import {
@@ -30,12 +31,40 @@ import {
   WXID_RE,
   PIXEL_RATE_LIMIT,
   AUTH_RATE_LIMIT,
+  REGISTER_RATE_LIMIT,
+  MESSAGE_CONTENT_MAX,
   AUDIT_LOG_RETENTION_DAYS,
   SECURITY_HEADERS,
   DASHBOARD_CSP,
   LOGIN_CSP,
 } from "./config.js";
 // ── 路由 ────────────────────────────────────────────────
+
+// /pixel 参数容错解析：收件端微信可能原样保留 CDATA 中的 &amp; 或将其转义，
+// 逐级兜底，保证只要 URL 带完整 id 就能识别
+function pixelParams(url) {
+  const raw = url.search.replace(/&amp;/g, "&");
+  const p = new URLSearchParams(raw);
+  // URLSearchParams 会解码 %26 等转义，可能把后续参数并进值里，截断处理
+  let wxId = (p.get("wxId") || "").split("&")[0];
+  let id = p.get("id") || "";
+  if (!/^[0-9a-fA-F]{64}$/.test(id)) id = "";
+  if (!wxId || !id) {
+    let decoded = "";
+    try {
+      decoded = decodeURIComponent(raw).replace(/&amp;/g, "&");
+    } catch {}
+    if (!wxId) {
+      const m = /(?:^|[?&])wxId=([^&"<\s]+)/.exec(decoded);
+      if (m) wxId = m[1];
+    }
+    if (!id) {
+      const m = /(?:^|[?&])id=([0-9a-fA-F]{64})(?:&|$)/.exec(decoded);
+      if (m) id = m[1];
+    }
+  }
+  return { wxId, id };
+}
 
 async function handleRequest(request, env) {
   const url = new URL(request.url);
@@ -57,8 +86,7 @@ async function handleRequest(request, env) {
 
   // GET /pixel：追踪像素（对已注册的消息才记录读取）
   if (path === "/pixel" && request.method === "GET") {
-    const wxId = params.get("wxId") || "";
-    const id = params.get("id") || "";
+    const { wxId, id } = pixelParams(url);
     if (!wxId || !id || wxId.length > 64 || id.length > 64) {
       return new Response("Bad Request", { status: 400, headers: { ...SECURITY_HEADERS } });
     }
@@ -180,7 +208,17 @@ async function handleRequest(request, env) {
 
   // POST /register：注册消息（wxid 必须是已注册账号）
   if (path === "/register" && request.method === "POST") {
-    const body = await request.json();
+    const ip = getClientIP(request);
+    // fail-open：客户端注册失败只是静默丢一条，不应因限流故障断送功能
+    if (!(await rateLimit("regmsg:" + ip, REGISTER_RATE_LIMIT, 60, false))) {
+      return json({ error: "Too Many Requests" }, 429);
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
     const { wxId, content, createTime } = body;
     if (!wxId || !content || createTime == null) {
       return json({ error: "Missing fields: wxId, content, createTime" }, 400);
@@ -189,10 +227,12 @@ async function handleRequest(request, env) {
       typeof wxId !== "string" ||
       wxId.length > 64 ||
       typeof content !== "string" ||
-      content.length > 4000
+      content.length > MESSAGE_CONTENT_MAX
     ) {
       return json(
-        { error: "Invalid fields: wxId (string ≤64 chars), content (string ≤4000 chars)" },
+        {
+          error: `Invalid fields: wxId (string ≤64 chars), content (string ≤${MESSAGE_CONTENT_MAX} chars)`,
+        },
         400
       );
     }
@@ -284,6 +324,7 @@ async function handleRequest(request, env) {
       .bind(await hashPassword(newP), session.wxId)
       .run();
     await audit(env.DB, "password_change", session.wxId);
+    await revokeOtherSessions(request, env.DB, session.wxId);
     return json({ ok: true });
   }
 
@@ -349,6 +390,7 @@ async function handleRequest(request, env) {
         .bind(await hashPassword(password), wxId)
         .run();
       await audit(env.DB, "admin_set_password", wxId);
+      await revokeOtherSessions(request, env.DB, wxId);
       return json({ ok: true });
     }
 
