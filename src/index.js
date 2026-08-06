@@ -100,18 +100,38 @@ async function handleRequest(request, env) {
     if (!(await rateLimit("pixel:" + ip, PIXEL_RATE_LIMIT, 60, false))) {
       return new Response("Too Many Requests", { status: 429, headers: { ...SECURITY_HEADERS } });
     }
-    const msg = await env.DB.prepare("SELECT 1 FROM messages WHERE id = ? AND wx_id = ?")
+    const msg = await env.DB.prepare("SELECT content FROM messages WHERE id = ? AND wx_id = ?")
       .bind(id, wxId)
       .first();
     if (!msg) {
       return new Response("Not Found", { status: 404, headers: { ...SECURITY_HEADERS } });
     }
     const ts = nowTimestamp();
-    await env.DB.prepare(
+    const res = await env.DB.prepare(
       "INSERT OR IGNORE INTO reads (id, wx_id, ip, timestamp) VALUES (?, ?, ?, ?)"
     )
       .bind(id, wxId, ip, ts)
       .run();
+    // 排行榜按「累计已读」统计（只增不减，不受配额清理影响）；失败不影响像素主流程
+    if (res?.meta?.changes > 0) {
+      try {
+        const cnDate = chinaDate();
+        await env.DB
+          .prepare(
+            "INSERT INTO read_stats (wx_id, date, count) VALUES (?, ?, 1) " +
+              "ON CONFLICT (wx_id, date) DO UPDATE SET count = count + 1"
+          )
+          .bind(wxId, cnDate)
+          .run();
+        await env.DB
+          .prepare(
+            "INSERT INTO message_read_stats (id, wx_id, content, date, count) VALUES (?, ?, ?, ?, 1) " +
+              "ON CONFLICT (id, date) DO UPDATE SET count = count + 1"
+          )
+          .bind(id, wxId, String(msg.content || "").slice(0, 50), cnDate)
+          .run();
+      } catch {}
+    }
     return new Response(PNG_1x1, {
       headers: {
         "Content-Type": "image/png",
@@ -342,53 +362,96 @@ async function handleRequest(request, env) {
     return json({ ok: true });
   }
 
-  // GET /leaderboard：注册消息数排行榜（日榜/总榜，仅前十，wxid 服务端脱敏，me 标记本人行）
+  // GET /leaderboard：注册/已读排行榜（metric=reg|read|msg，scope=day|total，
+  // 仅前十，wxid 服务端脱敏，me 标记本人行/本人消息）
   if (path === "/leaderboard" && request.method === "GET") {
     const scope = params.get("scope") || "total";
+    const metric = params.get("metric") || "reg";
     if (scope !== "day" && scope !== "total") {
       return json({ error: "Invalid scope: must be day or total" }, 400);
     }
+    if (metric !== "reg" && metric !== "read" && metric !== "msg") {
+      return json({ error: "Invalid metric: must be reg, read or msg" }, 400);
+    }
+    const table =
+      metric === "reg" ? "registration_stats" : metric === "read" ? "read_stats" : "message_read_stats";
+    const orderBy =
+      metric === "msg" ? "cnt DESC, wx_id ASC, id ASC" : "cnt DESC, wx_id ASC";
     let rows = [];
     try {
       if (scope === "day") {
         // 日榜按中国时区（UTC+8）自然日划分
+        const cols = metric === "msg" ? "id, wx_id, content, count AS cnt" : "wx_id, count AS cnt";
         const result = await env.DB
           .prepare(
-            "SELECT wx_id, count AS cnt FROM registration_stats WHERE date = ? " +
-              "ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+            `SELECT ${cols} FROM ${table} WHERE date = ? ` +
+              `ORDER BY ${orderBy} LIMIT 10`
           )
           .bind(chinaDate())
           .all();
         rows = result.results || [];
       } else {
+        const cols =
+          metric === "msg"
+            ? "id, wx_id, substr(content, 1, 50) AS content, SUM(count) AS cnt"
+            : "wx_id, SUM(count) AS cnt";
+        const groupBy = metric === "msg" ? "GROUP BY id" : "GROUP BY wx_id";
         const result = await env.DB
           .prepare(
-            "SELECT wx_id, SUM(count) AS cnt FROM registration_stats " +
-              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+            `SELECT ${cols} FROM ${table} ` +
+              `${groupBy} ORDER BY ${orderBy} LIMIT 10`
           )
           .all();
         rows = result.results || [];
       }
     } catch {
-      // registration_stats 表尚未创建（未重跑 schema.sql）：回退到当前 messages 表统计
-      if (scope === "day") {
+      // 统计表尚未创建（未重跑 schema.sql）：回退到当前消息/已读表实时统计
+      if (metric === "reg") {
+        // 注册榜回退：按当前存留消息数
         const result = await env.DB
           .prepare(
-            "SELECT wx_id, COUNT(*) AS cnt FROM messages WHERE timestamp >= ? " +
-              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+            `SELECT m.wx_id, COUNT(*) AS cnt FROM messages m ${
+              scope === "day" ? "WHERE m.timestamp >= ? " : ""
+            }GROUP BY m.wx_id ORDER BY cnt DESC, m.wx_id ASC LIMIT 10`
           )
-          .bind(chinaDayStartTimestamp())
+          .bind(...(scope === "day" ? [chinaDayStartTimestamp()] : []))
+          .all();
+        rows = result.results || [];
+      } else if (metric === "read") {
+        // 已读榜回退：按当前已读记录数
+        const result = await env.DB
+          .prepare(
+            `SELECT r.wx_id, COUNT(*) AS cnt FROM reads r ${
+              scope === "day" ? "WHERE r.timestamp >= ? " : ""
+            }GROUP BY r.wx_id ORDER BY cnt DESC, r.wx_id ASC LIMIT 10`
+          )
+          .bind(...(scope === "day" ? [chinaDayStartTimestamp()] : []))
           .all();
         rows = result.results || [];
       } else {
+        // 消息榜回退：按消息的当前已读人数
         const result = await env.DB
           .prepare(
-            "SELECT wx_id, COUNT(*) AS cnt FROM messages " +
-              "GROUP BY wx_id ORDER BY cnt DESC, wx_id ASC LIMIT 10"
+            "SELECT m.id, m.wx_id, m.content, COUNT(DISTINCT r.ip) AS cnt " +
+              "FROM messages m LEFT JOIN reads r ON r.id = m.id " +
+              (scope === "day" ? "AND r.timestamp >= ? " : "") +
+              "GROUP BY m.id ORDER BY cnt DESC, m.wx_id ASC, m.id ASC LIMIT 10"
           )
+          .bind(...(scope === "day" ? [chinaDayStartTimestamp()] : []))
           .all();
         rows = result.results || [];
       }
+    }
+    if (metric === "msg") {
+      return json(
+        rows.map((r) => ({
+          id: r.id,
+          wxId: maskWxId(r.wx_id),
+          content: r.content,
+          count: r.cnt,
+          me: r.wx_id === session.wxId,
+        }))
+      );
     }
     return json(
       rows.map((r) => ({
@@ -470,6 +533,8 @@ async function handleRequest(request, env) {
         await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
         try {
           await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+          await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
+          await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
         } catch {}
       }
       await audit(env.DB, "set_level", level === 0 ? `${wxId} -> 0 (data wiped)` : `${wxId} -> ${level}`);
@@ -520,6 +585,8 @@ async function handleRequest(request, env) {
       await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
       try {
         await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
       } catch {}
       await env.DB.prepare("DELETE FROM sessions WHERE wx_id = ?").bind(wxId).run();
       await env.DB.prepare("DELETE FROM users WHERE wx_id = ?").bind(wxId).run();
@@ -550,6 +617,8 @@ async function handleRequest(request, env) {
       await env.DB.prepare("DELETE FROM messages WHERE wx_id = ?").bind(wxId).run();
       try {
         await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
+        await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
       } catch {}
       await audit(env.DB, "admin_delete_wxid", wxId);
       return json({ ok: true });

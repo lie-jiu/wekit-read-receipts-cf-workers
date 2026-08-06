@@ -43,7 +43,7 @@ sequenceDiagram
 - **Deterministic IDs** — Message ID = `SHA256(wxId + \0 + content + \0 + createTime)`, computed independently by client and server with identical results
 - **IP deduplication** — the same IP opening multiple times counts as 1 read, enforced at the storage level via a unique index
 - **Dashboard** — dark-themed, responsive UI with EN/中文 i18n, search, filtering, expandable read details, password change
-- **Messages leaderboard** — shows a leaderboard of registered-message counts on the dashboard, switchable between daily and overall; counts are cumulative "messages ever registered" and are unaffected by level-quota cleanup; top 10 only, wxids masked server-side (full account never reaches the frontend), your own row highlighted; the daily ranking is based on the China timezone (UTC+8) day boundary
+- **Leaderboards** — three boards on the dashboard (registration / reads / per-message reads), each switchable between daily and overall; counts are cumulative "ever occurred" data (messages registered, read receipts received, reads per message) unaffected by level-quota cleanup; top 10 only, wxids masked server-side (full account never reaches the frontend), your own row (or your messages) highlighted; the daily ranking uses the China timezone (UTC+8) day boundary
 - **Serverless, zero cost** — runs on the Cloudflare Workers edge network; within the free tier: 100k requests/day, 5GB D1 reads/day
 
 ## Client Integration
@@ -99,7 +99,7 @@ New users are **level 1**. Level N means: keep up to **N messages**, each for up
 | GET | `/messages/{wxId}?q=` | List messages by sender (own only) |
 | DELETE | `/messages/{wxId}` | Delete all messages from a sender (own only, audited) |
 | GET | `/reads/{id}` | Get detailed read records for an own message |
-| GET | `/leaderboard?scope=day\|total` | Leaderboard of registered-message counts (cumulative, top 10, wxids masked, `me` flag marks yourself; daily scope uses the China timezone) |
+| GET | `/leaderboard?scope=day\|total&metric=reg\|read\|msg` | Leaderboard: `reg` registration / `read` reads / `msg` per-message reads (cumulative, top 10, wxids masked, `me` flag marks yourself; daily scope uses the China timezone) |
 | POST | `/auth/logout` | Destroy current session |
 | POST | `/auth/password` | Change own password |
 
@@ -162,7 +162,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 Re-run `schema.sql` once. It is idempotent and will:
 
 - create the `users`, `sessions`, and `audit_logs` tables
-- create the `registration_stats` table (leaderboard source) and backfill registration counts for existing messages using the China timezone
+- create the `registration_stats`, `read_stats`, and `message_read_stats` tables (leaderboard source) and backfill registration/read counts for existing data using the China timezone
 - deduplicate existing `reads` rows and add the unique `(id, ip)` index
 - add the `reads(wx_id, timestamp)` index to avoid full-table scans on `/count` polling
 - (existing readers who already re-opened a message keep their first record only)

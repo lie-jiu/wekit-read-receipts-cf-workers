@@ -280,6 +280,12 @@ export function htmlPage(session) { return `<!doctype html>
         font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
         font-size: 0.78rem;
       }
+      .lb-msg-col {
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .lb-count-col {
         color: #60a5fa;
         font-weight: 600;
@@ -532,7 +538,11 @@ export function htmlPage(session) { return `<!doctype html>
 
       <div class="leaderboard">
         <div class="leaderboard-header">
-          <span class="leaderboard-title" data-i18n="leaderboard">Leaderboard</span>
+          <div class="flex">
+            <button class="btn btn-sm scope-btn scope-active" id="metricReg" onclick="setMetric('reg')" data-i18n="regBoard">Reg</button>
+            <button class="btn btn-sm scope-btn" id="metricRead" onclick="setMetric('read')" data-i18n="readBoard">Reads</button>
+            <button class="btn btn-sm scope-btn" id="metricMsg" onclick="setMetric('msg')" data-i18n="msgBoard">Messages</button>
+          </div>
           <div class="flex">
             <button class="btn btn-sm scope-btn scope-active" id="scopeDay" onclick="setScope('day')" data-i18n="daily">Daily</button>
             <button class="btn btn-sm scope-btn" id="scopeTotal" onclick="setScope('total')" data-i18n="total">Total</button>
@@ -542,8 +552,9 @@ export function htmlPage(session) { return `<!doctype html>
           <thead>
             <tr>
               <th data-i18n="rank">Rank</th>
-              <th data-i18n="account">Account</th>
-              <th data-i18n="messageCount">Messages</th>
+              <th id="lbCol2">Account</th>
+              <th id="lbCol3">Messages</th>
+              <th id="lbCol4" class="hidden">Reads</th>
             </tr>
           </thead>
           <tbody id="lbTbody"></tbody>
@@ -669,6 +680,10 @@ export function htmlPage(session) { return `<!doctype html>
           loading: "加载中...",
           noRecords: "暂无消息",
           leaderboard: "注册消息排行榜",
+          regBoard: "注册榜",
+          readBoard: "已读榜",
+          msgBoard: "消息榜",
+          owner: "归属用户",
           daily: "日榜",
           total: "总榜",
           rank: "排名",
@@ -715,6 +730,10 @@ export function htmlPage(session) { return `<!doctype html>
           loading: "Loading...",
           noRecords: "No messages found",
           leaderboard: "Messages Leaderboard",
+          regBoard: "Reg",
+          readBoard: "Reads",
+          msgBoard: "Messages",
+          owner: "Owner",
           daily: "Daily",
           total: "Overall",
           rank: "Rank",
@@ -760,6 +779,7 @@ export function htmlPage(session) { return `<!doctype html>
         lang = lang === "zh-CN" ? "en" : "zh-CN";
         localStorage.setItem("lang", lang);
         applyI18n();
+        updateLbHeaders();
       }
 
       /* ── toast ── */
@@ -868,22 +888,47 @@ export function htmlPage(session) { return `<!doctype html>
 
       /* ── leaderboard ── */
       let lbScope = "total";
+      let lbMetric = "reg";
       const lbTbody = document.getElementById("lbTbody");
+      const lbCol2 = document.getElementById("lbCol2");
+      const lbCol3 = document.getElementById("lbCol3");
+      const lbCol4 = document.getElementById("lbCol4");
+
+      function lbSpan() {
+        return lbMetric === "msg" ? 4 : 3;
+      }
+
+      function updateLbHeaders() {
+        if (lbMetric === "msg") {
+          lbCol2.textContent = t("message");
+          lbCol3.textContent = t("owner");
+          lbCol4.textContent = t("reads");
+          lbCol4.classList.remove("hidden");
+        } else {
+          lbCol2.textContent = t("account");
+          lbCol3.textContent = lbMetric === "read" ? t("reads") : t("messageCount");
+          lbCol4.classList.add("hidden");
+        }
+      }
 
       async function loadLeaderboard() {
         lbTbody.innerHTML =
-          '<tr class="empty-row"><td colspan="3">' +
+          '<tr class="empty-row"><td colspan="' +
+          lbSpan() +
+          '">' +
           esc(t("loading")) +
           "</td></tr>";
         try {
-          const res = await fetch("/leaderboard?scope=" + lbScope);
+          const res = await fetch("/leaderboard?scope=" + lbScope + "&metric=" + lbMetric);
           if (res.status === 401) {
             location.href = "/";
             return;
           }
           if (!res.ok) {
             lbTbody.innerHTML =
-              '<tr class="empty-row"><td colspan="3">' +
+              '<tr class="empty-row"><td colspan="' +
+              lbSpan() +
+              '">' +
               esc(t("leaderboardEmpty")) +
               "</td></tr>";
             return;
@@ -891,26 +936,49 @@ export function htmlPage(session) { return `<!doctype html>
           const data = await res.json();
           if (!data.length) {
             lbTbody.innerHTML =
-              '<tr class="empty-row"><td colspan="3">' +
+              '<tr class="empty-row"><td colspan="' +
+              lbSpan() +
+              '">' +
               esc(t("leaderboardEmpty")) +
               "</td></tr>";
             return;
           }
+          const rankCell = (i) => \`<td class="rank-col rank-\${i < 3 ? i + 1 : "x"}">\${i + 1}</td>\`;
           lbTbody.innerHTML = data
-            .map(
-              (r, i) => \`<tr class="\${r.me ? "row-me" : ""}">
-      <td class="rank-col rank-\${i < 3 ? i + 1 : "x"}">\${i + 1}</td>
+            .map((r, i) => {
+              if (lbMetric === "msg") {
+                return \`<tr class="\${r.me ? "row-me" : ""}">
+      \${rankCell(i)}
+      <td class="lb-msg-col">\${esc(r.content)}</td>
       <td class="wxid-col">\${esc(r.wxId)}</td>
       <td class="lb-count-col">\${esc(r.count)}</td>
-    </tr>\`,
-            )
+    </tr>\`;
+              }
+              return \`<tr class="\${r.me ? "row-me" : ""}">
+      \${rankCell(i)}
+      <td class="wxid-col">\${esc(r.wxId)}</td>
+      <td class="lb-count-col">\${esc(r.count)}</td>
+    </tr>\`;
+            })
             .join("");
         } catch (e) {
           lbTbody.innerHTML =
-            '<tr class="empty-row"><td colspan="3">' +
+            '<tr class="empty-row"><td colspan="' +
+            lbSpan() +
+            '">' +
             esc(t("networkError")) +
             "</td></tr>";
         }
+      }
+
+      function setMetric(m) {
+        if (lbMetric === m) return;
+        lbMetric = m;
+        document.getElementById("metricReg").classList.toggle("scope-active", m === "reg");
+        document.getElementById("metricRead").classList.toggle("scope-active", m === "read");
+        document.getElementById("metricMsg").classList.toggle("scope-active", m === "msg");
+        updateLbHeaders();
+        loadLeaderboard();
       }
 
       function setScope(s) {
@@ -1092,6 +1160,7 @@ export function htmlPage(session) { return `<!doctype html>
       document.getElementById("userChip").textContent =
         ME.wxId + " · Lv" + ME.level;
       applyI18n();
+      updateLbHeaders();
       loadAll();
     </script>
   </body>
