@@ -1,7 +1,4 @@
 node_modules/
-package-lock.json
-tests/
-vitest.config.mts
 .wrangler/
 .dev.vars
 mkuser.mjs

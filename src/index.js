@@ -469,7 +469,7 @@ async function handleRequest(request, env) {
   }
 
   // ── 管理员端点 ──
-  if (isAdmin) {
+  if (isAdmin && path.startsWith("/admin")) {
     // 管理员凭据泄露时的高价值目标：独立限流（fail-closed，限流故障时拒绝）
     const ip = getClientIP(request);
     if (!(await rateLimit("admin:" + ip, ADMIN_RATE_LIMIT, 60, true))) {
