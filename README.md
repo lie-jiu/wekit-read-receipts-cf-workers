@@ -168,7 +168,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 - （已重复打开过消息的现有读者只保留第一条记录）
 
 > [!NOTE]
-> 重跑 `schema.sql` 会清空 `sessions` 表（全体用户需重新登录一次）。
+> 重跑 `schema.sql` 不会清空 `sessions` 表，已登录用户无需重新登录。
 
 ### 清空数据
 
@@ -177,7 +177,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 
 ## 安全设计
 
-- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/register`（消息）：每 IP 每分钟 30 次（fail-open，不影响客户端）；`/auth/verify`、`/auth/register`、`/auth/password`：每 IP 每分钟 5 次（fail-closed）
+- **速率限制** — `/pixel`：每 IP 每分钟 10 次；`/register`（消息）：每 IP 每分钟 30 次（fail-open，不影响客户端）；`/auth/verify`、`/auth/register`、`/auth/password`：每 IP 每分钟 5 次（fail-closed）；`/admin/*`：每 IP 每分钟 30 次（fail-closed，防止管理员凭据泄露后被滥用）
 - **密码哈希** — PBKDF2-SHA256，每用户随机 salt，10 万次迭代（Web Crypto，Workers 原生支持）
 - **已注册消息校验** — `/pixel` 忽略未注册消息的读取（阻止灌库攻击）
 - **存储级去重** — `reads(id, ip)` 唯一索引 + `INSERT OR IGNORE`

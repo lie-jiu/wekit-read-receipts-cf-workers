@@ -29,7 +29,9 @@ export async function extractSession(request, env) {
             : 1;
         return { wxId: row.wx_id, level };
       }
-    } catch {}
+    } catch (e) {
+      console.error("extractSession failed:", e);
+    }
   }
   return null;
 }
@@ -51,7 +53,9 @@ export async function createSessionCookie(db, wxId) {
     .slice(0, 19);
   try {
     await db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowTimestamp()).run();
-  } catch {}
+  } catch (e) {
+    console.error("cleanup expired sessions failed:", e);
+  }
   const res = await db
     .prepare("INSERT INTO sessions (token_hash, wx_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
     .bind(await sha256Hex(sessionId), wxId, nowTimestamp(), expiresAt)
@@ -73,7 +77,9 @@ export async function destroySession(request, db) {
             .prepare("DELETE FROM sessions WHERE token_hash = ?")
             .bind(await sha256Hex(value.slice(5)))
             .run();
-        } catch {}
+        } catch (e) {
+          console.error("destroySession failed:", e);
+        }
       }
     }
   }
@@ -103,7 +109,9 @@ export async function revokeOtherSessions(request, db, wxId) {
     } else {
       await db.prepare("DELETE FROM sessions WHERE wx_id = ?").bind(wxId).run();
     }
-  } catch {}
+  } catch (e) {
+    console.error("revokeOtherSessions failed:", e);
+  }
 }
 
 // ── 等级配额：惰性清理（注册新消息 / 查看消息时触发）────

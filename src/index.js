@@ -35,6 +35,7 @@ import {
   WXID_RE,
   PIXEL_RATE_LIMIT,
   AUTH_RATE_LIMIT,
+  ADMIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
   MESSAGE_CONTENT_MAX,
   AUDIT_LOG_RETENTION_DAYS,
@@ -131,7 +132,9 @@ async function handleRequest(request, env) {
           )
           .bind(id, wxId, String(msg.content || "").slice(0, 50), cnDate)
           .run();
-      } catch {}
+      } catch (e) {
+        console.error("pixel read_stats update failed:", e);
+      }
     }
     return new Response(PNG_1x1, {
       headers: {
@@ -289,7 +292,9 @@ async function handleRequest(request, env) {
           )
           .bind(wxId, chinaDate())
           .run();
-      } catch {}
+      } catch (e) {
+        console.error("register registration_stats update failed:", e);
+      }
     }
     return json({ id });
   }
@@ -465,6 +470,11 @@ async function handleRequest(request, env) {
 
   // ── 管理员端点 ──
   if (isAdmin) {
+    // 管理员凭据泄露时的高价值目标：独立限流（fail-closed，限流故障时拒绝）
+    const ip = getClientIP(request);
+    if (!(await rateLimit("admin:" + ip, ADMIN_RATE_LIMIT, 60, true))) {
+      return json({ error: "Too Many Requests" }, 429);
+    }
     // GET /admin：管理后台页面
     if (path === "/admin" && request.method === "GET") {
       return new Response(adminPage(session), {
@@ -536,7 +546,9 @@ async function handleRequest(request, env) {
           await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
           await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
           await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
-        } catch {}
+        } catch (e) {
+          console.error("set_level stats cleanup failed:", e);
+        }
       }
       await audit(env.DB, "set_level", level === 0 ? `${wxId} -> 0 (data wiped)` : `${wxId} -> ${level}`);
       return json({ ok: true });
@@ -588,7 +600,9 @@ async function handleRequest(request, env) {
         await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
         await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
         await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
-      } catch {}
+      } catch (e) {
+        console.error("admin delete user stats cleanup failed:", e);
+      }
       await env.DB.prepare("DELETE FROM sessions WHERE wx_id = ?").bind(wxId).run();
       await env.DB.prepare("DELETE FROM users WHERE wx_id = ?").bind(wxId).run();
       await audit(env.DB, "user_delete", wxId);
@@ -620,7 +634,9 @@ async function handleRequest(request, env) {
         await env.DB.prepare("DELETE FROM registration_stats WHERE wx_id = ?").bind(wxId).run();
         await env.DB.prepare("DELETE FROM read_stats WHERE wx_id = ?").bind(wxId).run();
         await env.DB.prepare("DELETE FROM message_read_stats WHERE wx_id = ?").bind(wxId).run();
-      } catch {}
+      } catch (e) {
+        console.error("admin delete messages stats cleanup failed:", e);
+      }
       await audit(env.DB, "admin_delete_wxid", wxId);
       return json({ ok: true });
     }
@@ -786,6 +802,8 @@ export default {
         .slice(0, 19);
       await env.DB.prepare("DELETE FROM audit_logs WHERE timestamp < ?").bind(auditCutoff).run();
       await env.DB.prepare("DELETE FROM reads WHERE id NOT IN (SELECT id FROM messages)").run();
-    } catch {}
+    } catch (e) {
+      console.error("scheduled cleanup failed:", e);
+    }
   },
 };

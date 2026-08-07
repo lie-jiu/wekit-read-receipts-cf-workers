@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS reads (
     id        TEXT NOT NULL,
     wx_id     TEXT NOT NULL,
     ip        TEXT NOT NULL,
-    timestamp TEXT NOT NULL
+    timestamp TEXT NOT NULL,
+    PRIMARY KEY (id, ip)
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -19,7 +20,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TEXT NOT NULL
 );
 
-DROP TABLE IF EXISTS sessions;
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     wx_id      TEXT NOT NULL,

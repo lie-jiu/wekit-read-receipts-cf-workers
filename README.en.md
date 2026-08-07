@@ -168,7 +168,7 @@ Re-run `schema.sql` once. It is idempotent and will:
 - (existing readers who already re-opened a message keep their first record only)
 
 > [!NOTE]
-> Re-running `schema.sql` truncates the `sessions` table (all users must log in again once).
+> Re-running `schema.sql` does not truncate the `sessions` table; logged-in users stay logged in.
 
 ### Wiping data
 
@@ -177,7 +177,7 @@ Re-run `schema.sql` once. It is idempotent and will:
 
 ## Security Design
 
-- **Rate limiting** — `/pixel`: 10 req/min per IP; `/register` (messages): 30 req/min per IP (fail-open, does not break the client); `/auth/verify`, `/auth/register`, `/auth/password`: 5 req/min per IP (fail-closed)
+- **Rate limiting** — `/pixel`: 10 req/min per IP; `/register` (messages): 30 req/min per IP (fail-open, does not break the client); `/auth/verify`, `/auth/register`, `/auth/password`: 5 req/min per IP (fail-closed); `/admin/*`: 30 req/min per IP (fail-closed, mitigates abuse if admin credentials leak)
 - **Password hashing** — PBKDF2-SHA256, per-user random salt, 100k iterations (Web Crypto, natively available in Workers)
 - **Registered-message check** — `/pixel` ignores reads for unregistered messages (blocks DB-filling attacks)
 - **Storage-level dedup** — unique index on `reads(id, ip)` + `INSERT OR IGNORE`

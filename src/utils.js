@@ -122,7 +122,8 @@ export async function rateLimit(key, limit, windowSec, failClosed = false) {
       })
     );
     return true;
-  } catch {
+  } catch (e) {
+    console.error(`rateLimit failed (key=${key}):`, e);
     return !failClosed;
   }
 }
@@ -134,7 +135,9 @@ export async function audit(db, action, detail) {
       .prepare("INSERT INTO audit_logs (timestamp, action, detail) VALUES (?, ?, ?)")
       .bind(nowTimestamp(), action, String(detail).slice(0, 500))
       .run();
-  } catch {}
+  } catch (e) {
+    console.error(`audit write failed (action=${action}):`, e);
+  }
 }
 
 // 中国时区（UTC+8）当日日期 YYYY-MM-DD（日榜按中国自然日划分）
@@ -151,11 +154,13 @@ export function chinaDayStartTimestamp() {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
-// 用户名脱敏：wxid 开头保留 "wxid_" + 前 1 位 + 后 3 位，中间用星号掩盖（仅服务端调用，避免完整 wxid 暴露到前端）
+// 用户名脱敏：短号整体打码，长号保留前 4 位 + 后 4 位，中间用星号掩盖
+// （仅服务端调用，避免完整 wxId 暴露到前端；对非标准格式的 wxId 同样生效）
 export function maskWxId(wxId) {
   const s = String(wxId || "");
-  if (!/^wxid_/i.test(s)) return s;
-  return s.slice(0, 7) + "***" + s.slice(-3);
+  if (!s) return s;
+  if (s.length <= 8) return s[0] + "***" + s.slice(-1);
+  return s.slice(0, 4) + "***" + s.slice(-4);
 }
 
 // 消息内容脱敏：≥5 字时只保留前后各 2 字，中间用星号掩盖；不足 5 字全文显示

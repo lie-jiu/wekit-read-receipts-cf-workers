@@ -864,6 +864,7 @@ export function htmlPage(session) { return `<!doctype html>
           noReads: "暂无读取记录",
           close: "关闭",
           readsFor: "「{0}」的已读记录",
+          quotaHint: "等级 {0}：最多保留 {0} 条消息，可追溯 {0} 个月。超出将自动删除最早的消息。",
         },
         en: {
           title: "Read Receipts",
@@ -914,6 +915,8 @@ export function htmlPage(session) { return `<!doctype html>
           noReads: "No reads yet",
           close: "Close",
           readsFor: 'Reads for: "{0}"',
+          quotaHint:
+            "Level {0}: keep up to {0} messages for {0} months. Registering more auto-removes the oldest.",
         },
       };
 
@@ -937,6 +940,8 @@ export function htmlPage(session) { return `<!doctype html>
             el.textContent = t(key);
           }
         });
+        const chip = document.getElementById("userChip");
+        if (chip) chip.title = t("quotaHint", ME.level);
       }
 
       function toggleLang() {
