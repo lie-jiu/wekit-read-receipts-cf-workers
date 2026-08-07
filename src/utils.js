@@ -86,9 +86,8 @@ export async function passwordMatches(password, stored) {
   if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
   const iterations = parseInt(parts[1], 10);
   if (!Number.isInteger(iterations) || iterations < 1000) return false;
-  const a = await pbkdf2Hash(password, parts[2], iterations);
-  const b = await sha256Hex(parts[3]);
-  return (await sha256Hex(a)) === b;
+  const hash = await pbkdf2Hash(password, parts[2], iterations);
+  return safeEquals(hash, parts[3]);
 }
 
 export async function computeId(wxId, content, createTime) {
