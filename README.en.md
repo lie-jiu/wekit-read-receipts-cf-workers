@@ -185,7 +185,7 @@ Re-run `schema.sql` once. It is idempotent and will:
 - **Session cookies** — random id, hash-at-rest, 30-day expiry, `__Host-` prefix, Secure/HttpOnly/SameSite=Lax
 - **Trusted client IP only** — reads `CF-Connecting-IP`; client-controlled headers are ignored
 - **Security headers** — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on all responses
-- **Input validation** — length limits on register fields, LIKE-wildcard escaping, malformed-URL handling, wxid format validation
+- **Input validation** — length limits on register fields, LIKE-wildcard escaping, malformed-URL handling
 - **Audit log** — every bulk/sender delete is recorded in the `audit_logs` table (auto-purged after 30 days)
 
 ## Project Structure

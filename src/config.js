@@ -10,7 +10,6 @@ export const PASSWORD_MAX = 128;
 export const PBKDF2_ITERATIONS = 100000; // 密码哈希迭代次数
 export const LEVEL_MAX = 99;
 export const AUDIT_LOG_RETENTION_DAYS = 30; // 审计日志保留天数
-export const WXID_RE = /^wxid_[a-z0-9]{14}$/;
 
 export const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",

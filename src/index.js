@@ -32,7 +32,6 @@ import {
   PASSWORD_MIN,
   PASSWORD_MAX,
   LEVEL_MAX,
-  WXID_RE,
   PIXEL_RATE_LIMIT,
   AUTH_RATE_LIMIT,
   ADMIN_RATE_LIMIT,
@@ -159,8 +158,8 @@ async function handleRequest(request, env) {
     const password = String(formData.get("password") || "");
     const password2 = String(formData.get("password2") || "");
     const invite = String(formData.get("invite") || "").trim();
-    if (!WXID_RE.test(wxId)) {
-      return json({ error: "wxId must match pattern: wxid_ followed by 14 lowercase letters/digits (e.g. wxid_abc123def4567g)" }, 400);
+    if (!wxId || wxId.length > 64) {
+      return json({ error: "Invalid wxId (non-empty, ≤64 chars)" }, 400);
     }
     if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
       return json({ error: `Password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters` }, 400);

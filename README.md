@@ -185,7 +185,7 @@ npx wrangler d1 execute read-receipts --file=./schema.sql --remote
 - **会话 cookie** — 随机 ID、静态哈希、30 天有效期、`__Host-` 前缀、Secure/HttpOnly/SameSite=Lax
 - **仅信任客户端 IP** — 只读取 `CF-Connecting-IP`，忽略客户端可控的请求头
 - **安全响应头** — 所有响应均携带 CSP、`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`
-- **输入校验** — 注册字段长度限制、LIKE 通配符转义、畸形 URL 处理、wxid 格式校验
+- **输入校验** — 注册字段长度限制、LIKE 通配符转义、畸形 URL 处理
 - **审计日志** — 每次批量/按发送者删除都会记录到 `audit_logs` 表（自动保留 30 天后清理）
 
 ## 项目结构
