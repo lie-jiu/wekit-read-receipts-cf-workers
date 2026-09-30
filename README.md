@@ -1,3 +1,12 @@
+> [!IMPORTANT]
+> **本仓库已归档、停止维护（2026-08），请使用新版：[lie-jiu/wekit-read-receipts-server](https://github.com/lie-jiu/wekit-read-receipts-server)。**
+>
+> 新版把存储从 Cloudflare D1 换成 **SQLite**（Bun 运行时用 `bun:sqlite`，Workers 运行时用 Durable Object 内置 SQLite），同一代码库支持四种部署形态，并新增等级权益公式、IP 定位配额、审计日志与 `bun run manage` 运维脚本。本仓库仅作为 D1 架构的历史存档保留，**这里的 issue 与 PR 不再处理**。
+>
+> - **历史数据可以带走**：新版自带 `scripts/migrate-d1.ts`，经 D1 REST API 把本项目的 `users` / `messages` / `reads` / `registration_stats` 全量迁入，脚本幂等、可重跑；步骤见新版 README 的「从 CF Workers 迁移」章节。
+> - **许可已变更**：本仓库为 Apache-2.0，新版为 AGPL-3.0，二次分发前请确认差异。
+> - English notice: same content at the top of [README.en.md](README.en.md).
+
 # Read Receipts Server
 
 [English](README.en.md) | 简体中文
