@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+> **This repository is archived and unmaintained (since 2026-08). Please use [lie-jiu/wekit-read-receipts-server](https://github.com/lie-jiu/wekit-read-receipts-server) instead.**
+>
+> The successor replaces Cloudflare D1 with plain **SQLite** (`bun:sqlite` on Bun, Durable Object storage on Cloudflare Workers), ships four deployment forms from one codebase, and adds level-based quota formulas, IP geolocation quotas, audit logging and a `bun run manage` ops CLI. This repo remains available only as an archive of the D1 architecture — **issues and PRs here will not be actioned**.
+>
+> - **Your data carries over**: `scripts/migrate-d1.ts` pulls `users` / `messages` / `reads` / `registration_stats` out of D1 through the D1 REST API; it is idempotent and safe to re-run.
+> - **License changed**: this repo is Apache-2.0, the new one is AGPL-3.0 — check the difference before redistributing.
+
 # Read Receipts Server
 
 English | [简体中文](README.md)
